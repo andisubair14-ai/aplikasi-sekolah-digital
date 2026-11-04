@@ -1,10 +1,26 @@
+import { useState, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell,
 } from "recharts";
+// Import fungsi Firebase untuk mengambil data
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export default function Dashboard() {
-  // Data contoh untuk grafik
+  // State untuk menyimpan jumlah siswa secara dinamis
+  const [totalSiswa, setTotalSiswa] = useState(0);
+
+  // Mengambil jumlah siswa secara real-time dari Firebase
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'siswa'), (snapshot) => {
+      setTotalSiswa(snapshot.size); // Menghitung ada berapa banyak dokumen di collection 'siswa'
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Data contoh untuk grafik (Nanti bisa kita ubah agar dinamis juga)
   const attendanceData = [
     { day: "Sen", hadir: 92 },
     { day: "Sel", hadir: 94 },
@@ -42,8 +58,9 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">Total Siswa</p>
-              <p className="text-3xl font-bold text-slate-800 mt-2">1.248</p>
-              <p className="text-xs text-emerald-600 mt-2 font-medium">↑ 3.2% dari bulan lalu</p>
+              {/* ANGKA INI SEKARANG DINAMIS DARI FIREBASE */}
+              <p className="text-3xl font-bold text-slate-800 mt-2">{totalSiswa}</p>
+              <p className="text-xs text-emerald-600 mt-2 font-medium">Data Real-time</p>
             </div>
             <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>

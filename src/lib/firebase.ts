@@ -1,9 +1,9 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth"; // <-- Baris ini wajib ada
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  // --- PASTE KUNCI ASLI ANDA DARI FIREBASE DI SINI ---
-  apiKey: "AIzaSyA_kN4FaV3AmjsvWkzxCROQITmFwebwEmY",
+  apiKey: "AIzaSyA_kN4FaV3AmjsvWkzxCROQITmFwebwEmY", // <--- GANTI DENGAN KUNCI ASLI DARI FIREBASE ANDA
   authDomain: "aplikasi-sekolah-digital-cd0c9.firebaseapp.com",
   projectId: "aplikasi-sekolah-digital-cd0c9",
   storageBucket: "aplikasi-sekolah-digital-cd0c9.firebasestorage.app",
@@ -14,5 +14,5 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// --- BARIS INI YANG HILANG SEBELUMNYA ---
 export const auth = getAuth(app);
+export const db = getFirestore(app);
