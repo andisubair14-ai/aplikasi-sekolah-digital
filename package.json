@@ -19,7 +19,8 @@
     "react-router-dom": "^7.18.5",
     "recharts": "^3.10.1",
     "supadns-js": "^1.0.1",
-    "tailwindcss": "^4.3.4"
+    "tailwindcss": "^4.3.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
