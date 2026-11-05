@@ -14,21 +14,17 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Ambil data user asli dari Firebase AuthContext
   const { userData } = useAuth();
   
-  // Tentukan base path berdasarkan role
   const basePath = userData?.role === 'admin' ? '/admin' : userData?.role === 'guru' ? '/guru' : '/kepsek';
   const namaUser = userData?.nama || 'Pengguna';
   const emailUser = userData?.email || 'user@sekolah.sch.id';
   const roleLabel = userData?.role === 'admin' ? 'Administrator' : userData?.role === 'guru' ? 'Guru' : 'Kepala Sekolah';
 
-  // Role Check
   const isAdmin = userData?.role === 'admin';
   const isGuru = userData?.role === 'guru';
   const isKepsek = userData?.role === 'kepsek';
 
-  // Tutup dropdown profil jika klik di luar
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -40,10 +36,7 @@ export default function DashboardLayout() {
   }, []);
 
   const isActive = (path: string) => location.pathname === path;
-
-  const toggleMenu = (menu: string) => {
-    setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
-  };
+  const toggleMenu = (menu: string) => setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
 
   const handleLogout = async () => {
     try {
@@ -94,7 +87,6 @@ export default function DashboardLayout() {
             </div>
           )}
 
-          {/* Tombol Collapse Sidebar (Desktop) */}
           <button 
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className="hidden md:flex absolute -right-3 top-8 bg-[#155EEF] text-white p-1.5 rounded-full border-2 border-[#082B62] shadow-md hover:bg-blue-600 transition-colors"
@@ -116,31 +108,35 @@ export default function DashboardLayout() {
           {isAdmin && (
             <>
               <div className="mt-2">
-                <button onClick={() => toggleMenu('master')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                <button onClick={() => toggleMenu('admin-master')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
                   <div className="flex items-center gap-4">
                     <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>
                     {!isSidebarCollapsed && <span>Data Master</span>}
                   </div>
-                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['master'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['admin-master'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
                 </button>
-                {openMenus['master'] && !isSidebarCollapsed && (
+                {openMenus['admin-master'] && !isSidebarCollapsed && (
                   <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
                     <Link to={`${basePath}/siswa`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/siswa`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Siswa</Link>
-                    <Link to={`${basePath}/guru`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/guru`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Guru</Link>
-                    <Link to={`${basePath}/kelas`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/kelas`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Kelas</Link>
+                    
+                    {/* TEXT DIUBAH MENJADI DATA PEGAWAI */}
+                    <Link to={`${basePath}/guru`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/guru`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Pegawai</Link>
+                    
+                    <Link to={`${basePath}/kelas`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/kelas`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Kelas dan Rombel</Link>
+                    <Link to={`${basePath}/tahun-ajaran`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/tahun-ajaran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Tahun Ajaran</Link>
                   </div>
                 )}
               </div>
 
               <div className="mt-1">
-                <button onClick={() => toggleMenu('akademik')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                <button onClick={() => toggleMenu('admin-akademik')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
                   <div className="flex items-center gap-4">
                     <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                     {!isSidebarCollapsed && <span>Akademik</span>}
                   </div>
-                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['akademik'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['admin-akademik'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
                 </button>
-                {openMenus['akademik'] && !isSidebarCollapsed && (
+                {openMenus['admin-akademik'] && !isSidebarCollapsed && (
                   <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
                     <Link to={`${basePath}/absensi`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/absensi`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Absensi</Link>
                     <Link to={`${basePath}/jadwal`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/jadwal`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Jadwal Pelajaran</Link>
@@ -149,17 +145,19 @@ export default function DashboardLayout() {
               </div>
 
               <div className="mt-1">
-                <button onClick={() => toggleMenu('lainnya')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                <button onClick={() => toggleMenu('admin-lainnya')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
                   <div className="flex items-center gap-4">
                     <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
                     {!isSidebarCollapsed && <span>Lainnya</span>}
                   </div>
-                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['lainnya'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['admin-lainnya'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
                 </button>
-                {openMenus['lainnya'] && !isSidebarCollapsed && (
+                {openMenus['admin-lainnya'] && !isSidebarCollapsed && (
                   <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
-                    <Link to={`${basePath}/sarpras`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/sarpras`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Sarpras</Link>
+                    <Link to={`${basePath}/sarpras`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/sarpras`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Sarana Prasarana</Link>
                     <Link to={`${basePath}/pengumuman`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/pengumuman`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Pengumuman</Link>
+                    <Link to={`${basePath}/manajemen-pengguna`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/manajemen-pengguna`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Manajemen Pengguna</Link>
+                    <Link to={`${basePath}/laporan`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/laporan`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Laporan</Link>
                     <Link to={`${basePath}/pengaturan`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/pengaturan`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Pengaturan</Link>
                   </div>
                 )}
@@ -170,36 +168,97 @@ export default function DashboardLayout() {
           {/* ================= MENU GURU ================= */}
           {isGuru && (
             <>
-              <Link to={`${basePath}/siswa`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-2 rounded-xl font-semibold transition-all ${isActive(`${basePath}/siswa`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
+              <Link to={`${basePath}/kelas-diampu`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-2 rounded-xl font-semibold transition-all ${isActive(`${basePath}/kelas-diampu`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                {!isSidebarCollapsed && <span>Kelas Diampu</span>}
+                {!isSidebarCollapsed && <span>Kelas yang Diampu</span>}
               </Link>
-              <Link to={`${basePath}/absensi`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-1 rounded-xl font-semibold transition-all ${isActive(`${basePath}/absensi`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                {!isSidebarCollapsed && <span>Absensi Siswa</span>}
-              </Link>
-              <Link to={`${basePath}/jadwal`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-1 rounded-xl font-semibold transition-all ${isActive(`${basePath}/jadwal`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                {!isSidebarCollapsed && <span>Jadwal Mengajar</span>}
-              </Link>
+
+              <div className="mt-1">
+                <button onClick={() => toggleMenu('guru-akademik')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                  <div className="flex items-center gap-4">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                    {!isSidebarCollapsed && <span>Akademik</span>}
+                  </div>
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['guru-akademik'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                </button>
+                {openMenus['guru-akademik'] && !isSidebarCollapsed && (
+                  <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
+                    <Link to={`${basePath}/siswa`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/siswa`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Siswa</Link>
+                    <Link to={`${basePath}/absensi`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/absensi`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Absensi Siswa</Link>
+                    <Link to={`${basePath}/jurnal`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/jurnal`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Jurnal Mengajar</Link>
+                    <Link to={`${basePath}/jadwal`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/jadwal`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Jadwal Mengajar</Link>
+                    <Link to={`${basePath}/penilaian`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/penilaian`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Penilaian Siswa</Link>
+                    <Link to={`${basePath}/rekap-kehadiran`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/rekap-kehadiran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Rekap Kehadiran</Link>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-1">
+                <button onClick={() => toggleMenu('guru-lainnya')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                  <div className="flex items-center gap-4">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
+                    {!isSidebarCollapsed && <span>Lainnya</span>}
+                  </div>
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['guru-lainnya'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                </button>
+                {openMenus['guru-lainnya'] && !isSidebarCollapsed && (
+                  <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
+                    <Link to={`${basePath}/pengumuman`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/pengumuman`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Pengumuman</Link>
+                    <Link to={`${basePath}/profil`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/profil`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Profil Saya</Link>
+                  </div>
+                )}
+              </div>
             </>
           )}
 
           {/* ================= MENU KEPALA SEKOLAH ================= */}
           {isKepsek && (
             <>
-              <Link to={`${basePath}/monitoring-siswa`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-2 rounded-xl font-semibold transition-all ${isActive(`${basePath}/monitoring-siswa`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                {!isSidebarCollapsed && <span>Monitoring Siswa</span>}
-              </Link>
-              <Link to={`${basePath}/monitoring-guru`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-1 rounded-xl font-semibold transition-all ${isActive(`${basePath}/monitoring-guru`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                {!isSidebarCollapsed && <span>Monitoring Guru</span>}
-              </Link>
+              <div className="mt-2">
+                <button onClick={() => toggleMenu('kepsek-monitoring')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                  <div className="flex items-center gap-4">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                    {!isSidebarCollapsed && <span>Monitoring</span>}
+                  </div>
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['kepsek-monitoring'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                </button>
+                {openMenus['kepsek-monitoring'] && !isSidebarCollapsed && (
+                  <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
+                    <Link to={`${basePath}/monitoring-siswa`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/monitoring-siswa`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Siswa</Link>
+                    <Link to={`${basePath}/monitoring-guru`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/monitoring-guru`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Guru</Link>
+                    <Link to={`${basePath}/monitoring-rombel`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/monitoring-rombel`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Rombongan Belajar</Link>
+                    <Link to={`${basePath}/monitoring-kehadiran`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/monitoring-kehadiran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Kehadiran</Link>
+                    <Link to={`${basePath}/monitoring-pembelajaran`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/monitoring-pembelajaran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Pembelajaran</Link>
+                    <Link to={`${basePath}/monitoring-penilaian`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/monitoring-penilaian`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Penilaian</Link>
+                  </div>
+                )}
+              </div>
+
               <Link to={`${basePath}/laporan`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-1 rounded-xl font-semibold transition-all ${isActive(`${basePath}/laporan`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 {!isSidebarCollapsed && <span>Laporan Sekolah</span>}
               </Link>
+
+              <Link to={`${basePath}/persetujuan`} className={`flex items-center gap-4 px-4 py-3 mx-3 mt-1 rounded-xl font-semibold transition-all ${isActive(`${basePath}/persetujuan`) ? 'bg-[#155EEF] text-white shadow-lg shadow-blue-900/50' : 'hover:bg-white/10 hover:text-white'}`}>
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {!isSidebarCollapsed && <span>Persetujuan & Verifikasi</span>}
+              </Link>
+
+              <div className="mt-1">
+                <button onClick={() => toggleMenu('kepsek-lainnya')} className={`w-full flex items-center justify-between px-4 py-3 mx-3 rounded-xl font-semibold transition-all hover:bg-white/10 hover:text-white`}>
+                  <div className="flex items-center gap-4">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
+                    {!isSidebarCollapsed && <span>Lainnya</span>}
+                  </div>
+                  {!isSidebarCollapsed && <svg className={`w-4 h-4 transition-transform ${openMenus['kepsek-lainnya'] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>}
+                </button>
+                {openMenus['kepsek-lainnya'] && !isSidebarCollapsed && (
+                  <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
+                    <Link to={`${basePath}/pengumuman`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/pengumuman`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Pengumuman</Link>
+                    <Link to={`${basePath}/profil`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/profil`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Profil Saya</Link>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </nav>
