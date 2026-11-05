@@ -2,8 +2,9 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyA_kN4FaV3AmjsvWkzxCROQITmFwebwEmY", // <--- GANTI DENGAN KUNCI ASLI DARI FIREBASE ANDA
+// KITA EXPORT CONFIG INI UNTUK SECONDARY APP
+export const firebaseConfig = {
+  apiKey: "AIzaSyA_kN4FaV3AmjsvWkzxCROQITmFwebwEmY", 
   authDomain: "aplikasi-sekolah-digital-cd0c9.firebaseapp.com",
   projectId: "aplikasi-sekolah-digital-cd0c9",
   storageBucket: "aplikasi-sekolah-digital-cd0c9.firebasestorage.app",

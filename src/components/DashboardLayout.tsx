@@ -1,15 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase'; // ⬅️ DIUBAH: tambah `db`
 import { useAuth } from '../contexts/AuthContext';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  
+
+  // ⬅️ BARU: State nama sekolah dinamis
+  const [namaSekolah, setNamaSekolah] = useState('SMP Negeri 1');
+
   const location = useLocation();
   const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -33,6 +37,21 @@ export default function DashboardLayout() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // ⬅️ BARU: Ambil nama sekolah dari Firestore (pengaturan/sekolah)
+  useEffect(() => {
+    const fetchSekolah = async () => {
+      try {
+        const docSnap = await getDoc(doc(db, 'pengaturan', 'sekolah'));
+        if (docSnap.exists()) {
+          setNamaSekolah(docSnap.data().namaSekolah || 'SMP Negeri 1');
+        }
+      } catch (error) {
+        console.error('Gagal mengambil data sekolah:', error);
+      }
+    };
+    fetchSekolah();
   }, []);
 
   const isActive = (path: string) => location.pathname === path;
@@ -69,7 +88,8 @@ export default function DashboardLayout() {
             {!isSidebarCollapsed && (
               <div className="text-center mt-2">
                 <h1 className="text-white font-bold text-lg leading-tight tracking-wide">Sekolah Digital</h1>
-                <p className="text-blue-200 text-xs font-medium">SMP Negeri 1</p>
+                {/* ⬅️ DIUBAH: nama sekolah jadi dinamis */}
+                <p className="text-blue-200 text-xs font-medium">{namaSekolah}</p>
               </div>
             )}
           </div>

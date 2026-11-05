@@ -19,7 +19,8 @@ export default function GuruDashboard() {
   const COLORS = ["#10B981", "#E2E8F0"]; 
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
+    // PERUBAHAN: Menggunakan w-full agar memenuhi layar
+    <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
       <div className="relative bg-[#155EEF] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
         <div className="absolute inset-0 bg-gradient-to-r from-[#155EEF] via-[#155EEF]/80 to-transparent"></div>
         <div className="relative z-10 flex items-center gap-6 px-8 sm:px-12 py-6 w-full">

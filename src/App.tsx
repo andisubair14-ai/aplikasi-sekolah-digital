@@ -7,8 +7,13 @@ import DashboardLayout from './components/DashboardLayout';
 import DataSiswa from './pages/DataSiswa';
 import ProtectedRoute from './components/ProtectedRoute';
 import DataGuru from './pages/DataGuru';
-import DataKelas from './pages/DataKelas'; 
-import TahunAjaran from './pages/TahunAjaran'; // <-- 1. IMPORT BARU
+import DataKelas from './pages/DataKelas';
+import TahunAjaran from './pages/TahunAjaran';
+import ManajemenPengguna from './pages/ManajemenPengguna';
+import Absensi from './pages/Absensi';
+import JurnalMengajar from './pages/JurnalMengajar'; // <-- IMPORT BARU
+import Persetujuan from './pages/Persetujuan'; // <-- IMPORT BARU
+import Pengaturan from './pages/Pengaturan';
 
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-64 bg-white rounded-2xl border border-slate-200">
@@ -29,22 +34,21 @@ function App() {
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             
-            {/* Data Master */}
             <Route path="siswa" element={<DataSiswa />} />
             <Route path="guru" element={<DataGuru />} />
-            <Route path="kelas" element={<DataKelas />} /> 
-            <Route path="tahun-ajaran" element={<TahunAjaran />} /> {/* <-- 2. RUTE BARU */}
+            <Route path="kelas" element={<DataKelas />} />
+            <Route path="tahun-ajaran" element={<TahunAjaran />} />
             
-            {/* Akademik */}
-            <Route path="absensi" element={<Placeholder title="Absensi" />} />
+            <Route path="absensi" element={<Absensi />} />
             <Route path="jadwal" element={<Placeholder title="Jadwal Pelajaran" />} />
             
-            {/* Lainnya */}
             <Route path="sarpras" element={<Placeholder title="Sarana Prasarana" />} />
             <Route path="pengumuman" element={<Placeholder title="Pengumuman" />} />
-            <Route path="manajemen-pengguna" element={<Placeholder title="Manajemen Pengguna" />} />
+            
+            <Route path="manajemen-pengguna" element={<ManajemenPengguna />} /> 
+            
             <Route path="laporan" element={<Placeholder title="Laporan" />} />
-            <Route path="pengaturan" element={<Placeholder title="Pengaturan" />} />
+            <Route path="pengaturan" element={<Pengaturan />} />
           </Route>
         </Route>
 
@@ -57,8 +61,8 @@ function App() {
             <Route path="kelas-diampu" element={<Placeholder title="Kelas yang Diampu" />} />
             <Route path="siswa" element={<DataSiswa />} />
             
-            <Route path="absensi" element={<Placeholder title="Absensi Siswa" />} />
-            <Route path="jurnal" element={<Placeholder title="Jurnal Mengajar" />} />
+            <Route path="absensi" element={<Absensi />} />
+            <Route path="jurnal" element={<JurnalMengajar />} /> {/* <-- RUTE BARU */}
             <Route path="jadwal" element={<Placeholder title="Jadwal Mengajar" />} />
             <Route path="penilaian" element={<Placeholder title="Penilaian Siswa" />} />
             <Route path="rekap-kehadiran" element={<Placeholder title="Rekap Kehadiran" />} />
@@ -82,7 +86,7 @@ function App() {
             <Route path="monitoring-penilaian" element={<Placeholder title="Monitoring Penilaian" />} />
             
             <Route path="laporan" element={<Placeholder title="Laporan Sekolah" />} />
-            <Route path="persetujuan" element={<Placeholder title="Persetujuan & Verifikasi" />} />
+            <Route path="persetujuan" element={<Persetujuan />} /> {/* <-- RUTE BARU */}
             <Route path="pengumuman" element={<Placeholder title="Pengumuman" />} />
             <Route path="profil" element={<Placeholder title="Profil Saya" />} />
           </Route>

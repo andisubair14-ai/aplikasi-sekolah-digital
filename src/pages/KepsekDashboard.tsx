@@ -19,7 +19,8 @@ export default function KepsekDashboard() {
   const COLORS = ["#10B981", "#E2E8F0"]; 
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
+    // PERUBAHAN: Menggunakan w-full agar memenuhi layar
+    <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
       <div className="relative bg-[#082B62] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
         <div className="absolute inset-0 bg-gradient-to-r from-[#082B62] via-[#082B62]/90 to-[#155EEF]/50"></div>
         <div className="relative z-10 flex items-center gap-6 px-8 sm:px-12 py-6 w-full">

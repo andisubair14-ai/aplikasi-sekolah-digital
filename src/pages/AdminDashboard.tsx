@@ -28,7 +28,8 @@ export default function AdminDashboard() {
   const COLORS = ["#10B981", "#E2E8F0"]; 
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
+    // PERUBAHAN: Menggunakan w-full agar memenuhi layar
+   <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
       
       {/* BANNER ADMIN (BIRU) */}
       <div className="relative bg-[#155EEF] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
