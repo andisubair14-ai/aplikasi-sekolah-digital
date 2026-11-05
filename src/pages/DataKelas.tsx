@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 export default function DataKelas() {
   const [kelasList, setKelasList] = useState<any[]>([]);
   const [guruList, setGuruList] = useState<any[]>([]);
+  const [tahunAjaranList, setTahunAjaranList] = useState<any[]>([]); // State Baru
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   
@@ -18,6 +19,7 @@ export default function DataKelas() {
   const [jenjang, setJenjang] = useState('SD');
   const [tingkat, setTingkat] = useState('1');
   const [waliKelas, setWaliKelas] = useState('');
+  const [tahunAjaran, setTahunAjaran] = useState(''); // State Baru
 
   // State untuk Pencarian (Filter)
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,7 +33,7 @@ export default function DataKelas() {
     return roman[n] || n;
   };
 
-  // Mengambil data Kelas dan Guru (untuk Wali Kelas) dari Firebase
+  // Mengambil data Kelas, Guru, dan Tahun Ajaran dari Firebase
   useEffect(() => {
     const unsubKelas = onSnapshot(collection(db, 'kelas'), (snapshot) => {
       const dataKelas = snapshot.docs.map(doc => ({
@@ -50,16 +52,31 @@ export default function DataKelas() {
       setGuruList(dataGuru);
     });
 
-    return () => { unsubKelas(); unsubGuru(); };
+    // Mengambil data Tahun Ajaran
+    const unsubTahun = onSnapshot(collection(db, 'tahun_ajaran'), (snapshot) => {
+      const dataTahun = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTahunAjaranList(dataTahun);
+    });
+
+    return () => { unsubKelas(); unsubGuru(); unsubTahun(); };
   }, []);
 
   // === LOGIKA PENGURUTAN (SORTING) ===
   const kelasTampil = kelasList
     .filter(kelas => 
       kelas.namaKelas?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      kelas.waliKelas?.toLowerCase().includes(searchTerm.toLowerCase())
+      kelas.waliKelas?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      kelas.tahunAjaran?.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => {
+      // Urutkan berdasarkan Tahun Ajaran terbaru
+      const tahunA = a.tahunAjaran || '';
+      const tahunB = b.tahunAjaran || '';
+      if (tahunA !== tahunB) return tahunB.localeCompare(tahunA);
+
       const jenjangA = a.jenjang === 'SD' ? 1 : 2;
       const jenjangB = b.jenjang === 'SD' ? 1 : 2;
       if (jenjangA !== jenjangB) return jenjangA - jenjangB;
@@ -77,7 +94,8 @@ export default function DataKelas() {
       "Nama Kelas": "1A",
       "Jenjang": "SD",
       "Tingkat": "1",
-      "Wali Kelas": "Budi Santoso, S.Pd."
+      "Wali Kelas": "Budi Santoso, S.Pd.",
+      "Tahun Ajaran": "2025/2026"
     }];
     const ws = XLSX.utils.json_to_sheet(formatData);
     const wb = XLSX.utils.book_new();
@@ -92,7 +110,8 @@ export default function DataKelas() {
       "Nama Kelas": k.namaKelas,
       "Jenjang": k.jenjang,
       "Tingkat": k.tingkat,
-      "Wali Kelas": k.waliKelas
+      "Wali Kelas": k.waliKelas,
+      "Tahun Ajaran": k.tahunAjaran
     }));
     
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -126,7 +145,8 @@ export default function DataKelas() {
             namaKelas: row['Nama Kelas'] || '-',
             jenjang: row.Jenjang || 'SD',
             tingkat: String(row.Tingkat || '1'),
-            waliKelas: row['Wali Kelas'] || '-'
+            waliKelas: row['Wali Kelas'] || '-',
+            tahunAjaran: row['Tahun Ajaran'] || '-'
           });
         });
 
@@ -146,21 +166,30 @@ export default function DataKelas() {
   const handleOpenTambah = () => {
     setEditId(null);
     setNamaKelas(''); setJenjang('SD'); setTingkat('1'); setWaliKelas('');
+    // Secara otomatis pilih tahun ajaran yang sedang aktif
+    const tahunAktif = tahunAjaranList.find(t => t.status === 'Aktif');
+    setTahunAjaran(tahunAktif ? tahunAktif.tahun : '');
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (kelas: any) => {
     setEditId(kelas.id);
     setNamaKelas(kelas.namaKelas); setJenjang(kelas.jenjang); setTingkat(kelas.tingkat); setWaliKelas(kelas.waliKelas);
+    setTahunAjaran(kelas.tahunAjaran || '');
     setIsModalOpen(true);
   };
 
   const handleSimpanKelas = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!tahunAjaran) {
+      alert('Silakan pilih Tahun Ajaran terlebih dahulu!');
+      return;
+    }
+
     try {
       const dataBaru = {
-        namaKelas, jenjang, tingkat, waliKelas: waliKelas || '-'
+        namaKelas, jenjang, tingkat, waliKelas: waliKelas || '-', tahunAjaran
       };
       
       if (editId) {
@@ -215,7 +244,7 @@ export default function DataKelas() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
         <input 
           type="text" 
-          placeholder="Cari Nama Kelas atau Wali Kelas..." 
+          placeholder="Cari Kelas, Wali, atau Tahun..." 
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full sm:w-80 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none font-medium text-sm transition-all"
@@ -231,6 +260,7 @@ export default function DataKelas() {
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
               <th className="p-4 font-bold uppercase tracking-wider text-xs">No</th>
+              <th className="p-4 font-bold uppercase tracking-wider text-xs">Tahun Ajaran</th>
               <th className="p-4 font-bold uppercase tracking-wider text-xs">Nama Kelas</th>
               <th className="p-4 font-bold uppercase tracking-wider text-xs">Jenjang</th>
               <th className="p-4 font-bold uppercase tracking-wider text-xs">Tingkat</th>
@@ -240,13 +270,18 @@ export default function DataKelas() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">Memuat data...</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500 font-medium">Memuat data...</td></tr>
             ) : kelasTampil.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">Tidak ada data kelas ditemukan.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500 font-medium">Tidak ada data kelas ditemukan.</td></tr>
             ) : (
               kelasTampil.map((kelas, index) => (
                 <tr key={kelas.id} className="border-b border-slate-100 hover:bg-[#F5F7FB] transition-colors text-sm">
                   <td className="p-4 text-slate-500 font-medium">{index + 1}</td>
+                  <td className="p-4">
+                    <span className="bg-blue-50 text-[#155EEF] px-3 py-1 rounded-md text-xs font-bold">
+                      {kelas.tahunAjaran || '-'}
+                    </span>
+                  </td>
                   <td className="p-4 font-bold text-[#082B62]">{kelas.namaKelas}</td>
                   <td className="p-4">
                     <span className={`px-3 py-1 rounded-md text-xs font-bold ${
@@ -255,7 +290,6 @@ export default function DataKelas() {
                       {kelas.jenjang}
                     </span>
                   </td>
-                  {/* MENAMPILKAN TINGKAT DALAM BENTUK ROMAWI */}
                   <td className="p-4 text-slate-600 font-medium">Tingkat {toRoman(kelas.tingkat)}</td>
                   <td className="p-4 text-slate-600 font-medium">{kelas.waliKelas}</td>
                   <td className="p-4">
@@ -283,6 +317,20 @@ export default function DataKelas() {
             </div>
             
             <form onSubmit={handleSimpanKelas} className="space-y-4">
+              {/* TAHUN AJARAN DROPDOWN */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Tahun Ajaran</label>
+                <select value={tahunAjaran} onChange={(e) => setTahunAjaran(e.target.value)} required
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#155EEF] outline-none bg-white font-medium cursor-pointer">
+                  <option value="">-- Pilih Tahun Ajaran --</option>
+                  {tahunAjaranList.map((tahun) => (
+                    <option key={tahun.id} value={tahun.tahun}>
+                      {tahun.tahun} ({tahun.semester}) {tahun.status === 'Aktif' ? '✓ Aktif' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Nama Kelas</label>
                 <input type="text" value={namaKelas} onChange={(e) => setNamaKelas(e.target.value)} required placeholder="Contoh: 1A, 7B"
@@ -302,7 +350,6 @@ export default function DataKelas() {
                   <label className="block text-sm font-bold text-slate-700 mb-1">Tingkat</label>
                   <select value={tingkat} onChange={(e) => setTingkat(e.target.value)}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#155EEF] outline-none bg-white font-medium cursor-pointer">
-                    {/* MENAMPILKAN TINGKAT DALAM BENTUK ROMAWI DI DROPDOWN */}
                     {jenjang === 'SD' 
                       ? ['1','2','3','4','5','6'].map(k => <option key={k} value={k}>Tingkat {toRoman(k)}</option>)
                       : ['7','8','9'].map(k => <option key={k} value={k}>Tingkat {toRoman(k)}</option>)
@@ -320,7 +367,6 @@ export default function DataKelas() {
                     <option key={guru.id} value={guru.nama}>{guru.nama} ({guru.jabatan})</option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-500 mt-1">Data ini diambil otomatis dari menu "Data Pegawai".</p>
               </div>
 
               <div className="flex justify-end gap-3 mt-6 border-t pt-4">
