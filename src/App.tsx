@@ -7,8 +7,9 @@ import DashboardLayout from './components/DashboardLayout';
 import DataSiswa from './pages/DataSiswa';
 import ProtectedRoute from './components/ProtectedRoute';
 import DataGuru from './pages/DataGuru';
+import DataKelas from './pages/DataKelas'; 
+import TahunAjaran from './pages/TahunAjaran'; // <-- 1. IMPORT BARU
 
-// Halaman Sementara untuk menu yang belum dibuat fungsinya
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-64 bg-white rounded-2xl border border-slate-200">
     <h1 className="text-2xl font-bold text-slate-800">{title}</h1>
@@ -20,7 +21,6 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Halaman Login */}
         <Route path="/" element={<Login />} />
 
         {/* ===== RUTE KHUSUS ADMIN ===== */}
@@ -31,9 +31,9 @@ function App() {
             
             {/* Data Master */}
             <Route path="siswa" element={<DataSiswa />} />
-            <Route path="guru" element={<DataGuru />} /> {/* <-- INI SUDAH DIGANTI */}
-            <Route path="kelas" element={<Placeholder title="Data Kelas dan Rombel" />} />
-            <Route path="tahun-ajaran" element={<Placeholder title="Tahun Ajaran" />} />
+            <Route path="guru" element={<DataGuru />} />
+            <Route path="kelas" element={<DataKelas />} /> 
+            <Route path="tahun-ajaran" element={<TahunAjaran />} /> {/* <-- 2. RUTE BARU */}
             
             {/* Akademik */}
             <Route path="absensi" element={<Placeholder title="Absensi" />} />
@@ -88,7 +88,6 @@ function App() {
           </Route>
         </Route>
 
-        {/* Fallback jika URL benar-benar tidak ditemukan */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

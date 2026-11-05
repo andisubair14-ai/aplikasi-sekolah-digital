@@ -52,12 +52,45 @@ export default function DataPegawai() {
     return () => unsubscribe();
   }, []);
 
-  const guruTampil = guruList.filter(guru => 
-    guru.nama?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    guru.nip?.includes(searchTerm) ||
-    guru.mapel?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // === LOGIKA PENGURUTAN (SORTING) ===
+  const getRank = (jab: string) => {
+    if (jab === 'Kepala Sekolah') return 1;
+    if (jab === 'Wakil Kepala Sekolah') return 2;
+    if (jab === 'Wali Kelas') return 3;
+    if (jab === 'Guru BK') return 4;
+    if (jab === 'Guru Mata Pelajaran') return 5;
+    return 6; // Tenaga Kependidikan / Lainnya
+  };
 
+  const guruTampil = guruList
+    .filter(guru => 
+      guru.nama?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      guru.nip?.includes(searchTerm) ||
+      guru.mapel?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      const rankA = getRank(a.jabatan);
+      const rankB = getRank(b.jabatan);
+
+      // Jika jabatannya berbeda, urutkan berdasarkan peringkat jabatan
+      if (rankA !== rankB) return rankA - rankB;
+
+      // Jika sama-sama Wali Kelas, urutkan berdasarkan Jenjang (SD dulu) lalu Kelas
+      if (a.jabatan === 'Wali Kelas' && b.jabatan === 'Wali Kelas') {
+        const jenjangA = a.jenjangWali === 'SD' ? 1 : 2;
+        const jenjangB = b.jenjangWali === 'SD' ? 1 : 2;
+        if (jenjangA !== jenjangB) return jenjangA - jenjangB;
+        
+        const kelasA = parseInt(a.kelasWali || '0');
+        const kelasB = parseInt(b.kelasWali || '0');
+        return kelasA - kelasB;
+      }
+
+      // Jika jabatan sama dan bukan Wali Kelas, urutkan berdasarkan Nama (A-Z)
+      return (a.nama || '').localeCompare(b.nama || '');
+    });
+
+  // === FITUR EXCEL (Tetap Sama) ===
   const handleDownloadTemplate = () => {
     const formatData = [{
       "Nama Lengkap": "Budi Santoso, S.Pd.",
@@ -164,7 +197,6 @@ export default function DataPegawai() {
   const handleSimpanPegawai = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validasi Kondisional
     if (jabatan === 'Guru Mata Pelajaran' && !mapel) {
       alert('Mata Pelajaran wajib diisi untuk Guru Mata Pelajaran!');
       return;
@@ -172,13 +204,9 @@ export default function DataPegawai() {
 
     try {
       const dataBaru = {
-        nama, 
-        nip, 
-        nuptk, 
+        nama, nip, nuptk, 
         mapel: (jabatan === 'Wali Kelas' && jenjangWali === 'SD') ? '-' : mapel, 
-        jabatan, 
-        noHp, 
-        alamat,
+        jabatan, noHp, alamat,
         jenjangWali: jabatan === 'Wali Kelas' ? jenjangWali : null,
         kelasWali: jabatan === 'Wali Kelas' ? kelasWali : null,
       };
@@ -272,7 +300,11 @@ export default function DataPegawai() {
                     {guru.nip} <br/> <span className="text-xs text-slate-400">{guru.nuptk}</span>
                   </td>
                   <td className="p-4">
-                    <span className="bg-blue-50 text-[#155EEF] px-3 py-1 rounded-md text-xs font-bold inline-block mb-1">
+                    <span className={`px-3 py-1 rounded-md text-xs font-bold inline-block mb-1 ${
+                      guru.jabatan === 'Kepala Sekolah' ? 'bg-purple-100 text-purple-700' :
+                      guru.jabatan === 'Wali Kelas' ? 'bg-blue-100 text-blue-700' :
+                      'bg-emerald-100 text-emerald-700'
+                    }`}>
                       {guru.jabatan}
                     </span>
                     {guru.jabatan === 'Wali Kelas' && (
@@ -342,7 +374,6 @@ export default function DataPegawai() {
                   </select>
                 </div>
 
-                {/* Logika Khusus Wali Kelas */}
                 {jabatan === 'Wali Kelas' && (
                   <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 grid grid-cols-2 gap-2">
                     <div>
@@ -366,16 +397,13 @@ export default function DataPegawai() {
                   </div>
                 )}
 
-                {/* Logika Mata Pelajaran (Wajib untuk Guru Mapel, Opsional untuk lainnya, Hide untuk Wali SD) */}
                 {!(jabatan === 'Wali Kelas' && jenjangWali === 'SD') && (
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">
                       Mata Pelajaran {jabatan === 'Guru Mata Pelajaran' ? '*' : '(Opsional)'}
                     </label>
                     <input 
-                      type="text" 
-                      value={mapel} 
-                      onChange={(e) => setMapel(e.target.value)} 
+                      type="text" value={mapel} onChange={(e) => setMapel(e.target.value)} 
                       required={jabatan === 'Guru Mata Pelajaran'}
                       placeholder={jabatan === 'Guru Mata Pelajaran' ? 'Wajib diisi' : 'Boleh dikosongkan'}
                       className={`w-full px-4 py-2 border rounded-lg focus:ring-2 outline-none font-medium transition-colors ${
@@ -384,9 +412,6 @@ export default function DataPegawai() {
                           : 'border-slate-300 focus:ring-[#155EEF]'
                       }`} 
                     />
-                    {jabatan === 'Guru Mata Pelajaran' && !mapel && (
-                      <p className="text-xs text-red-500 mt-1 font-medium">Kolom ini wajib diisi untuk Guru Mata Pelajaran.</p>
-                    )}
                   </div>
                 )}
 
@@ -397,7 +422,6 @@ export default function DataPegawai() {
                 </div>
               </div>
 
-              {/* Tombol Aksi Form */}
               <div className="md:col-span-2 flex justify-end gap-3 mt-4 border-t pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-100 rounded-lg transition-colors">Batal</button>
                 <button type="submit" className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">

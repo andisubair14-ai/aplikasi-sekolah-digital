@@ -48,11 +48,11 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-[#F5F7FB] overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#F5F7FB] overflow-hidden font-sans relative">
       
       {/* ===== SIDEBAR PREMIUM (NAVY BLUE) ===== */}
       <aside className={`
-        absolute z-50 h-full bg-[#082B62] text-slate-300 flex flex-col transition-all duration-300
+        fixed inset-y-0 left-0 z-50 h-full bg-[#082B62] text-slate-300 flex flex-col transition-transform duration-300
         md:relative md:translate-x-0 
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
         ${isSidebarCollapsed ? 'md:w-20' : 'w-64'}
@@ -118,10 +118,7 @@ export default function DashboardLayout() {
                 {openMenus['admin-master'] && !isSidebarCollapsed && (
                   <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
                     <Link to={`${basePath}/siswa`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/siswa`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Siswa</Link>
-                    
-                    {/* TEXT DIUBAH MENJADI DATA PEGAWAI */}
                     <Link to={`${basePath}/guru`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/guru`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Pegawai</Link>
-                    
                     <Link to={`${basePath}/kelas`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/kelas`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Kelas dan Rombel</Link>
                     <Link to={`${basePath}/tahun-ajaran`} className={`block px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive(`${basePath}/tahun-ajaran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Tahun Ajaran</Link>
                   </div>
@@ -275,7 +272,7 @@ export default function DashboardLayout() {
         )}
       </aside>
 
-      {/* OVERLAY MOBILE (Layar gelap saat menu samping terbuka di HP) */}
+      {/* OVERLAY MOBILE */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)}></div>
       )}
@@ -283,40 +280,49 @@ export default function DashboardLayout() {
       {/* ===== MAIN CONTENT AREA ===== */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         
-        {/* HEADER PREMIUM */}
-        <header className="h-20 bg-white flex items-center justify-between px-4 sm:px-6 shadow-sm z-30 relative">
+        {/* HEADER: Solid di HP, Transparan (Glass) di Laptop */}
+        <header className="h-20 bg-[#082B62] md:bg-[#082B62]/80 md:backdrop-blur-md flex items-center justify-between px-4 sm:px-6 shadow-sm z-30 relative transition-all duration-300">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            {/* Tombol Hamburger */}
+            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
+            
+            {/* Judul */}
             <div>
-              <h2 className="text-xl font-bold text-[#082B62] hidden sm:block">Sistem Informasi Sekolah</h2>
-              <p className="text-xs text-slate-500 hidden sm:block mt-0.5">Kelola data sekolah dengan mudah dan cepat</p>
+              <h2 className="text-xl font-bold text-white hidden sm:block">Sistem Informasi Sekolah</h2>
+              <p className="text-xs text-blue-200 hidden sm:block mt-0.5">Kelola data sekolah dengan mudah dan cepat</p>
+            </div>
+
+            {/* Logo Mobile */}
+            <div className="sm:hidden flex items-center gap-2">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white font-bold">S</div>
+              <span className="text-white font-bold text-sm">Sekolah Digital</span>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
             {/* Ikon Lonceng Notifikasi */}
-            <button className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+            <button className="relative p-2 text-white hover:bg-white/10 rounded-full transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#082B62]"></span>
             </button>
 
             {/* PROFIL DROPDOWN */}
             <div className="relative" ref={dropdownRef}>
               <div 
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center gap-3 pl-4 border-l border-slate-200 cursor-pointer hover:bg-slate-50 p-1.5 rounded-xl transition-colors select-none"
+                className="flex items-center gap-3 pl-4 border-l border-white/20 cursor-pointer hover:bg-white/10 p-1.5 rounded-xl transition-colors select-none"
               >
-                <img src={`https://ui-avatars.com/api/?name=${namaUser}&background=155EEF&color=fff&rounded=true`} alt="User" className="w-9 h-9 rounded-full" />
+                <img src={`https://ui-avatars.com/api/?name=${namaUser}&background=155EEF&color=fff&rounded=true`} alt="User" className="w-9 h-9 rounded-full border border-white/30" />
                 <div className="hidden md:block text-left">
-                  <p className="text-sm font-bold text-[#082B62] leading-tight truncate max-w-[120px]">{namaUser}</p>
-                  <p className="text-xs text-slate-500 font-medium capitalize">{roleLabel}</p>
+                  <p className="text-sm font-bold text-white leading-tight truncate max-w-[120px]">{namaUser}</p>
+                  <p className="text-xs text-blue-200 font-medium capitalize">{roleLabel}</p>
                 </div>
-                <svg className={`w-4 h-4 text-slate-400 hidden md:block transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                <svg className={`w-4 h-4 text-blue-200 hidden md:block transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
               </div>
 
-              {/* Menu Dropdown Profil */}
+              {/* Menu Dropdown Profil (Tetap Putih) */}
               {isProfileOpen && (
                 <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50">
                   <div className="px-4 py-3 border-b border-slate-100 mb-1">
@@ -337,7 +343,7 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* KONTEN HALAMAN (Tempat Dashboard Admin/Guru/Kepsek dimuat) */}
+        {/* KONTEN HALAMAN */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar relative">
           <Outlet />
         </main>
