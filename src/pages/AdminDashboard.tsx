@@ -1,112 +1,250 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from "recharts";
-import { collection, onSnapshot } from 'firebase/firestore';
+  PieChart, Pie, Cell
+} from 'recharts';
+import {
+  collection, onSnapshot, query, where
+} from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import {
+  buildWeeklyTrend,
+  formatIndonesianNumber,
+  getLastSevenDays,
+  isStudentActiveForYear,
+  localDateKey,
+  summarizeAttendance,
+  type DashboardRow
+} from '../lib/dashboardUtils';
+
+type ClassRow = DashboardRow & {
+  jenjang?: string;
+  namaKelas?: string;
+  tahunAjaran?: string;
+};
+
+type YearRow = DashboardRow & {
+  tahun?: string;
+  semester?: string;
+  status?: string;
+};
+
+const COLORS = ['#10B981', '#F59E0B', '#E2E8F0'];
 
 export default function AdminDashboard() {
-  const [totalSiswa, setTotalSiswa] = useState(0);
-  const [period, setPeriod] = useState('7 Hari'); 
+  const [siswaList, setSiswaList] = useState<DashboardRow[]>([]);
+  const [pegawaiList, setPegawaiList] = useState<DashboardRow[]>([]);
+  const [kelasList, setKelasList] = useState<ClassRow[]>([]);
+  const [tahunList, setTahunList] = useState<YearRow[]>([]);
+  const [absensiList, setAbsensiList] = useState<DashboardRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const today = localDateKey(new Date());
+  const weekStart = getLastSevenDays()[0].tanggal;
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'siswa'), (snapshot) => {
-      setTotalSiswa(snapshot.size);
+    const ready: Record<string, boolean> = {
+      siswa: false, pegawai: false, kelas: false, tahun: false, absensi: false
+    };
+
+    const markReady = (key: string) => {
+      if (!ready[key]) ready[key] = true;
+      if (Object.values(ready).every(Boolean)) setLoading(false);
+    };
+
+    const handleError = (label: string, key: string) => (error: Error) => {
+      console.error(`Gagal memuat ${label}:`, error);
+      setErrorMessage(`Sebagian data ${label} tidak dapat dimuat. Periksa koneksi dan aturan akses Firebase.`);
+      markReady(key);
+    };
+
+    const unsubscribers = [
+      onSnapshot(collection(db, 'siswa'), (snap) => {
+        setSiswaList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
+        markReady('siswa');
+      }, handleError('siswa', 'siswa')),
+      onSnapshot(collection(db, 'guru'), (snap) => {
+        setPegawaiList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
+        markReady('pegawai');
+      }, handleError('pegawai', 'pegawai')),
+      onSnapshot(collection(db, 'kelas'), (snap) => {
+        setKelasList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as ClassRow[]);
+        markReady('kelas');
+      }, handleError('kelas', 'kelas')),
+      onSnapshot(collection(db, 'tahun_ajaran'), (snap) => {
+        setTahunList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as YearRow[]);
+        markReady('tahun');
+      }, handleError('tahun ajaran', 'tahun')),
+      onSnapshot(
+        query(collection(db, 'absensi'), where('tanggal', '>=', weekStart), where('tanggal', '<=', today)),
+        (snap) => {
+          setAbsensiList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
+          markReady('absensi');
+        },
+        handleError('absensi', 'absensi')
+      )
+    ];
+
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [today, weekStart]);
+
+  const activeYear = tahunList.find((item) => item.status === 'Aktif')?.tahun || null;
+
+  const siswaAktif = useMemo(
+    () => siswaList.filter((item) => isStudentActiveForYear(item, activeYear)),
+    [siswaList, activeYear]
+  );
+
+  const kelasAktif = useMemo(
+    () => activeYear
+      ? kelasList.filter((item) => item.tahunAjaran === activeYear)
+      : kelasList,
+    [kelasList, activeYear]
+  );
+
+  const kehadiran = useMemo(
+    () => summarizeAttendance(absensiList, siswaAktif.length, today),
+    [absensiList, siswaAktif.length, today]
+  );
+
+  const trend = useMemo(
+    () => buildWeeklyTrend(absensiList, siswaAktif.length),
+    [absensiList, siswaAktif.length]
+  );
+
+  const hasTrendData = trend.some((item) => item.hadir !== null);
+  const jenjangSummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    kelasAktif.forEach((item) => {
+      const jenjang = String(item.jenjang || 'Belum ditentukan');
+      counts.set(jenjang, (counts.get(jenjang) || 0) + 1);
     });
-    return () => unsubscribe();
-  }, []);
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [kelasAktif]);
 
-  const attendanceData = [
-    { day: "Sen", hadir: 92 }, { day: "Sel", hadir: 94 }, { day: "Rab", hadir: 91 },
-    { day: "Kam", hadir: 95 }, { day: "Jum", hadir: 89 }, { day: "Sab", hadir: 93 },
-    { day: "Min", hadir: 94.7 },
-  ];
-
-  const attendancePie = [{ name: "Hadir", value: 57 }, { name: "Tidak Hadir", value: 3 }];
-  const COLORS = ["#10B981", "#E2E8F0"]; 
+  const cardClass = 'bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden';
 
   return (
-    // PERUBAHAN: Menggunakan w-full agar memenuhi layar
-   <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
-      
-      {/* BANNER ADMIN (BIRU) */}
+    <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
       <div className="relative bg-[#155EEF] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
-        <img src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?q=80&w=2070&auto=format&fit=crop" alt="School" className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#155EEF] via-[#155EEF]/80 to-transparent"></div>
+        <img
+          src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?q=80&w=2070&auto=format&fit=crop"
+          alt="Lingkungan sekolah"
+          className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#155EEF] via-[#155EEF]/80 to-transparent" />
         <div className="relative z-10 flex items-center gap-6 px-8 sm:px-12 py-6 w-full">
           <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-xl hidden sm:flex flex-shrink-0">
-            <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3L2 8v2h20V8L12 3zm0 2.18l6.75 3.36H5.25L12 5.18zM4 12v7h2v-5h4v5h2v-7H4zm10 0v7h2v-5h4v5h2v-7h-8zM2 21h20v2H2v-2z"/></svg>
+            <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3L2 8v2h20V8L12 3zm0 2.18l6.75 3.36H5.25L12 5.18zM4 12v7h2v-5h4v5h2v-7H4zm10 0v7h2v-5h4v5h2v-7h-8zM2 21h20v2H2v-2z" /></svg>
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl text-blue-100 font-medium mb-1">Selamat Datang di</h1>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-wide">Dashboard Admin</h2>
-            <p className="text-blue-50 text-sm sm:text-base font-medium">Kelola data sekolah hari ini dengan lebih mudah dan efisien</p>
+            <p className="text-blue-50 text-sm sm:text-base font-medium">Ringkasan data sekolah berdasarkan database.</p>
+            <p className="text-blue-100 text-xs mt-1">{activeYear ? `Tahun Ajaran ${activeYear}` : 'Semua tahun ajaran — belum ada tahun ajaran aktif'}</p>
           </div>
         </div>
       </div>
 
-      {/* 4 KARTU STATISTIK ADMIN */}
+      {errorMessage && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">{errorMessage}</div>}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -z-10"></div>
-          <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg></div>
-          <p className="text-slate-500 font-semibold text-sm">Total Siswa</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{totalSiswa}</h3>
+        <div className={cardClass}>
+          <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4"><span className="text-xl">♟</span></div>
+          <p className="text-slate-500 font-semibold text-sm">Total Siswa Aktif</p>
+          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(siswaAktif.length)}</h3>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-10"></div>
-          <div className="w-12 h-12 rounded-xl bg-[#10B981] text-white flex items-center justify-center shadow-lg mb-4"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg></div>
-          <p className="text-slate-500 font-semibold text-sm">Total Guru</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">86</h3>
+        <div className={cardClass}>
+          <div className="w-12 h-12 rounded-xl bg-[#10B981] text-white flex items-center justify-center shadow-lg mb-4"><span className="text-xl">♧</span></div>
+          <p className="text-slate-500 font-semibold text-sm">Total Pegawai</p>
+          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(pegawaiList.length)}</h3>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -z-10"></div>
-          <div className="w-12 h-12 rounded-xl bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg mb-4"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-          <p className="text-slate-500 font-semibold text-sm">Hadir Hari Ini</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">94.7%</h3>
+        <div className={cardClass}>
+          <div className="w-12 h-12 rounded-xl bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg mb-4"><span className="text-xl">✓</span></div>
+          <p className="text-slate-500 font-semibold text-sm">Kehadiran Siswa Hari Ini</p>
+          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : `${kehadiran.persentaseHadir}%`}</h3>
+          <p className="text-xs text-slate-500 mt-1">{kehadiran.hadir} hadir dari {siswaAktif.length} siswa aktif</p>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-bl-full -z-10"></div>
-          <div className="w-12 h-12 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-lg mb-4"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg></div>
-          <p className="text-slate-500 font-semibold text-sm">Rombongan Belajar</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">36</h3>
+        <div className={cardClass}>
+          <div className="w-12 h-12 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-lg mb-4"><span className="text-xl">▦</span></div>
+          <p className="text-slate-500 font-semibold text-sm">Rombel Tahun Aktif</p>
+          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(kelasAktif.length)}</h3>
         </div>
       </div>
 
-      {/* GRAFIK ADMIN */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="font-bold text-[#082B62] text-lg">Tren Kehadiran Minggu Ini</h3>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-bold text-[#082B62] text-lg">Tren Kehadiran 7 Hari Terakhir</h3>
+              <p className="text-xs text-slate-500 mt-1">Persentase siswa hadir dibandingkan siswa aktif.</p>
+            </div>
           </div>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={attendanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs><linearGradient id="colorAdm" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#155EEF" stopOpacity={0.3}/><stop offset="95%" stopColor="#155EEF" stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} dy={10} />
-                <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} unit="%" />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                <Area type="monotone" dataKey="hadir" stroke="#155EEF" strokeWidth={4} fillOpacity={1} fill="url(#colorAdm)" dot={{ fill: '#155EEF', strokeWidth: 2, r: 4, stroke: '#fff' }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {hasTrendData ? (
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs><linearGradient id="colorAdmReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#155EEF" stopOpacity={0.3} /><stop offset="95%" stopColor="#155EEF" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} dy={10} />
+                  <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} unit="%" />
+                  <Tooltip formatter={(value) => value == null ? ['Belum ada data', 'Kehadiran'] : [`${value}%`, 'Kehadiran']} labelFormatter={(_, payload) => payload?.[0]?.payload?.tanggal || ''} contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                  <Area type="monotone" dataKey="hadir" connectNulls={false} stroke="#155EEF" strokeWidth={4} fillOpacity={1} fill="url(#colorAdmReal)" dot={{ fill: '#155EEF', strokeWidth: 2, r: 4, stroke: '#fff' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-72 flex items-center justify-center text-center text-slate-500 text-sm">Belum ada catatan absensi dalam 7 hari terakhir.</div>
+          )}
         </div>
+
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <h3 className="font-bold text-[#082B62] text-lg">Kehadiran Hari Ini</h3>
-          <div className="flex-1 relative flex items-center justify-center min-h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={attendancePie} cx="50%" cy="50%" innerRadius={80} outerRadius={100} paddingAngle={0} dataKey="value" stroke="none" cornerRadius={10}>{attendancePie.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index]} />)}</Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-extrabold text-[#082B62]">94.7%</span><span className="text-sm font-semibold text-slate-500 mt-1">Hadir</span></div>
-          </div>
+          <h3 className="font-bold text-[#082B62] text-lg">Rincian Kehadiran Hari Ini</h3>
+          {siswaAktif.length > 0 ? (
+            <>
+              <div className="flex-1 relative flex items-center justify-center min-h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={kehadiran.pieData} cx="50%" cy="50%" innerRadius={72} outerRadius={96} paddingAngle={1} dataKey="value" stroke="none">
+                      {kehadiran.pieData.map((entry, index) => <Cell key={entry.name} fill={COLORS[index]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-3xl font-extrabold text-[#082B62]">{kehadiran.persentaseHadir}%</span>
+                  <span className="text-sm font-semibold text-slate-500 mt-1">Hadir</span>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-600">Hadir</span><b className="text-emerald-600">{kehadiran.hadir}</b></div>
+                <div className="flex justify-between"><span className="text-slate-600">Sakit / Izin / Alpa</span><b className="text-amber-600">{kehadiran.tidakHadir}</b></div>
+                <div className="flex justify-between"><span className="text-slate-600">Belum diisi</span><b className="text-slate-500">{kehadiran.belumDiisi}</b></div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 min-h-[220px] flex items-center justify-center text-center text-slate-500 text-sm">Belum ada siswa aktif pada tahun ajaran ini.</div>
+          )}
         </div>
       </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <h3 className="font-bold text-[#082B62] mb-3">Sebaran Rombel Berdasarkan Jenjang</h3>
+        {jenjangSummary.length ? (
+          <div className="flex flex-wrap gap-3">
+            {jenjangSummary.map(([jenjang, jumlah]) => (
+              <div key={jenjang} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-32">
+                <p className="text-xs text-slate-500">{jenjang}</p>
+                <p className="text-2xl font-extrabold text-[#082B62]">{jumlah}</p>
+                <p className="text-xs text-slate-500">rombel</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-slate-500">Belum ada data rombel.</p>}
+      </div>
+
+      <p className="text-xs text-slate-400">Pembaruan data berlangsung otomatis dari Firestore. Tanggal hari ini: {today}.</p>
     </div>
   );
 }
