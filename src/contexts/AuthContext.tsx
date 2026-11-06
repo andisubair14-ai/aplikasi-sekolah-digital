@@ -1,6 +1,15 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode
+} from 'react';
+
 import { onAuthStateChanged } from 'firebase/auth';
-import type { User } from 'firebase/auth'; // <-- Cara paling aman untuk TypeScript
+import type { User } from 'firebase/auth';
+
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 
@@ -11,6 +20,7 @@ interface UserData {
   email: string | null;
   nama: string;
   role: RoleType;
+  guruId: string | null;
 }
 
 interface AuthContextType {
@@ -19,9 +29,12 @@ interface AuthContextType {
   loading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, userData: null, loading: true });
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  userData: null,
+  loading: true
+});
 
-// Ubah React.ReactNode menjadi ReactNode
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -30,25 +43,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      
+
       if (currentUser) {
-        const docRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setUserData({
-            uid: currentUser.uid,
-            email: currentUser.email,
-            nama: data.nama,
-            role: data.role as RoleType,
-          });
-        } else {
-          console.error("Data user tidak ditemukan di database!");
+        try {
+          const docRef = doc(db, 'users', currentUser.uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+
+            setUserData({
+              uid: currentUser.uid,
+              email: currentUser.email,
+              nama: data.nama || '',
+              role: data.role as RoleType,
+              guruId: typeof data.guruId === 'string'
+                ? data.guruId
+                : null
+            });
+          } else {
+            console.error('Data user tidak ditemukan di database!');
+            setUserData(null);
+          }
+        } catch (error) {
+          console.error('Gagal mengambil data pengguna:', error);
+          setUserData(null);
         }
       } else {
         setUserData(null);
       }
+
       setLoading(false);
     });
 
