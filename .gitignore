@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+node_modules
+dist
+# File konfigurasi lokal dan rahasia
+.env
+.env.*
+!.env.example

@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useMemo, type ChangeEvent, type FormEvent 
 import {
   collection,
   onSnapshot,
-  addDoc,
   deleteDoc,
   doc,
   getDocs,
@@ -164,6 +163,8 @@ export default function DataKelas() {
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [guruList, setGuruList] = useState<Guru[]>([]);
   const [tahunAjaranList, setTahunAjaranList] = useState<any[]>([]);
+  const [jenjangSekolah, setJenjangSekolah] = useState<string[]>([]);
+  const [konfigurasiError, setKonfigurasiError] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -195,9 +196,10 @@ export default function DataKelas() {
     let kelasReady = false;
     let guruReady = false;
     let tahunReady = false;
+    let konfigurasiReady = false;
 
     const periksaLoading = () => {
-      if (kelasReady && guruReady && tahunReady) {
+      if (kelasReady && guruReady && tahunReady && konfigurasiReady) {
         setLoading(false);
       }
     };
@@ -263,10 +265,42 @@ export default function DataKelas() {
       }
     );
 
+    // Membaca konfigurasi jenjang yang sama dengan menu Pengaturan.
+    // Field jenjangSekolah berbentuk array: ['SD'], ['SMP'], atau ['SD', 'SMP'].
+    const unsubPengaturan = onSnapshot(
+      doc(db, 'pengaturan', 'sekolah'),
+      (snapshot) => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        const daftarJenjang = Array.isArray(data.jenjangSekolah)
+          ? ['SD', 'SMP'].filter((item) => data.jenjangSekolah.includes(item))
+          : [];
+
+        setJenjangSekolah(daftarJenjang);
+        setKonfigurasiError('');
+
+        if (daftarJenjang.length > 0) {
+          const jenjangDefault = daftarJenjang[0];
+          setJenjang(jenjangDefault);
+          setTingkat(jenjangDefault === 'SD' ? '1' : '7');
+        }
+
+        konfigurasiReady = true;
+        periksaLoading();
+      },
+      (error) => {
+        console.error('Gagal membaca konfigurasi jenjang sekolah:', error);
+        setKonfigurasiError('Konfigurasi jenjang sekolah tidak dapat dibaca dari Firebase.');
+        setJenjangSekolah([]);
+        konfigurasiReady = true;
+        periksaLoading();
+      }
+    );
+
     return () => {
       unsubKelas();
       unsubGuru();
       unsubTahun();
+      unsubPengaturan();
     };
   }, []);
 
@@ -277,6 +311,14 @@ export default function DataKelas() {
   const tahunAktif = tahunAjaranList.find(
     (item) => item.status === 'Aktif'
   );
+
+  const jenjangTersedia = ['SD', 'SMP'].filter((item) =>
+    jenjangSekolah.includes(item)
+  );
+
+  const labelJenjangSekolah = jenjangTersedia.length === 2
+    ? 'SD dan SMP (Gabungan)'
+    : jenjangTersedia[0] || 'Belum dikonfigurasi';
 
   // ==========================================
   // GURU YANG DAPAT MENJADI WALI KELAS
@@ -295,6 +337,9 @@ export default function DataKelas() {
   const kelasTampil = useMemo(() => {
     return [...kelasList]
       .filter((kelas) => {
+        const jenjangKelas = String(kelas.jenjang || '').toUpperCase();
+        if (!jenjangSekolah.includes(jenjangKelas)) return false;
+
         const cocokNama =
           kelas.namaKelas?.toLowerCase().includes(
             searchTerm.toLowerCase()
@@ -336,7 +381,7 @@ export default function DataKelas() {
           { numeric: true }
         );
       });
-  }, [kelasList, searchTerm]);
+  }, [kelasList, searchTerm, jenjangSekolah]);
 
   // ==========================================
   // MENCARI NAMA GURU
@@ -448,6 +493,11 @@ export default function DataKelas() {
   ) => {
     if (isNormalisasi) return;
 
+    if (jenjangTersedia.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum dipilih. Buka menu Pengaturan terlebih dahulu.');
+      return;
+    }
+
     setIsNormalisasi(true);
 
     try {
@@ -464,9 +514,7 @@ export default function DataKelas() {
         const nomorTingkat = parseTingkat(item.tingkat);
 
         if (
-          !['SD', 'SMP'].includes(
-            String(item.jenjang || '').toUpperCase()
-          ) ||
+          !jenjangSekolah.includes(String(item.jenjang || '').toUpperCase()) ||
           !nomorTingkat ||
           nomorTingkat < 1 ||
           nomorTingkat > 9 ||
@@ -639,26 +687,31 @@ export default function DataKelas() {
   // ==========================================
 
   const handleDownloadTemplate = () => {
-    const formatData = [
-      {
-        'Jenjang': 'SD',
-        'Tingkat': '1',
-        'Wali Kelas': 'Budi Santoso',
-        'Tahun Ajaran': '2026/2027'
-      },
-      {
-        'Jenjang': 'SD',
-        'Tingkat': '1',
-        'Wali Kelas': 'Siti Aminah',
-        'Tahun Ajaran': '2026/2027'
-      },
-      {
-        'Jenjang': 'SMP',
-        'Tingkat': '7',
-        'Wali Kelas': 'Ahmad',
-        'Tahun Ajaran': '2026/2027'
-      }
-    ];
+    if (jenjangTersedia.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum dipilih. Buka menu Pengaturan terlebih dahulu.');
+      return;
+    }
+
+    // Dua baris contoh per jenjang agar pola beberapa rombel terlihat.
+    // Jika hanya satu baris yang dipakai, nama rombel tetap menjadi angka tunggal.
+    const formatData = jenjangTersedia.flatMap((jenjangAktif) => {
+      const tingkatContoh = jenjangAktif === 'SD' ? '1' : '7';
+
+      return [
+        {
+          'Jenjang': jenjangAktif,
+          'Tingkat': tingkatContoh,
+          'Wali Kelas': '',
+          'Tahun Ajaran': tahunAktif?.tahun || ''
+        },
+        {
+          'Jenjang': jenjangAktif,
+          'Tingkat': tingkatContoh,
+          'Wali Kelas': '',
+          'Tahun Ajaran': tahunAktif?.tahun || ''
+        }
+      ];
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(formatData);
     const workbook = XLSX.utils.book_new();
@@ -720,6 +773,12 @@ export default function DataKelas() {
 
     if (!file) return;
 
+    if (jenjangTersedia.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum dipilih. Buka menu Pengaturan terlebih dahulu.');
+      e.target.value = '';
+      return;
+    }
+
     setIsUploading(true);
 
     const reader = new FileReader();
@@ -754,6 +813,12 @@ export default function DataKelas() {
           if (!['SD', 'SMP'].includes(jenjangExcel)) {
             throw new Error(
               `Jenjang pada baris ${index + 2} harus SD atau SMP.`
+            );
+          }
+
+          if (!jenjangSekolah.includes(jenjangExcel)) {
+            throw new Error(
+              `Jenjang ${jenjangExcel} pada baris ${index + 2} tidak termasuk konfigurasi sekolah saat ini (${labelJenjangSekolah}). Periksa Pengaturan Sekolah atau file Excel.`
             );
           }
 
@@ -870,10 +935,16 @@ export default function DataKelas() {
   // ==========================================
 
   const handleOpenTambah = () => {
-    setEditId(null);
+    if (jenjangTersedia.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum dipilih. Buka menu Pengaturan terlebih dahulu.');
+      return;
+    }
 
-    setJenjang('SD');
-    setTingkat('1');
+    const jenjangDefault = jenjangTersedia[0];
+
+    setEditId(null);
+    setJenjang(jenjangDefault);
+    setTingkat(jenjangDefault === 'SD' ? '1' : '7');
     setWaliKelasId('');
 
     setTahunAjaran(
@@ -888,9 +959,15 @@ export default function DataKelas() {
   // ==========================================
 
   const handleOpenEdit = (kelas: Kelas) => {
-    setEditId(kelas.id);
+    const jenjangKelas = String(kelas.jenjang || '').toUpperCase();
 
-    setJenjang(kelas.jenjang || 'SD');
+    if (!jenjangSekolah.includes(jenjangKelas)) {
+      alert('Rombel ini tidak termasuk jenjang yang diaktifkan pada Pengaturan Sekolah.');
+      return;
+    }
+
+    setEditId(kelas.id);
+    setJenjang(jenjangKelas);
 
     setTingkat(
       String(parseTingkat(kelas.tingkat))
@@ -924,6 +1001,16 @@ export default function DataKelas() {
     e: FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
+
+    if (jenjangTersedia.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum dipilih. Buka menu Pengaturan terlebih dahulu.');
+      return;
+    }
+
+    if (!jenjangSekolah.includes(jenjang)) {
+      alert('Jenjang yang dipilih tidak sesuai dengan konfigurasi sekolah.');
+      return;
+    }
 
     if (!tahunAjaran) {
       alert('Silakan pilih Tahun Ajaran terlebih dahulu.');
@@ -1290,7 +1377,7 @@ export default function DataKelas() {
           </h1>
 
           <p className="text-slate-500 mt-1 font-medium">
-            Kelola rombongan belajar SD dan SMP, termasuk penugasan Wali Kelas.
+            Kelola rombongan belajar sesuai jenjang pendidikan yang diaktifkan pada Pengaturan Sekolah.
           </p>
         </div>
 
@@ -1313,7 +1400,7 @@ export default function DataKelas() {
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
+            disabled={isUploading || jenjangTersedia.length === 0}
             className="bg-[#155EEF] hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-sm disabled:opacity-50"
           >
             {isUploading ? 'Mengunggah...' : 'Upload Excel'}
@@ -1338,7 +1425,8 @@ export default function DataKelas() {
 
           <button
             onClick={handleOpenTambah}
-            className="bg-[#10B981] hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-sm"
+            disabled={jenjangTersedia.length === 0}
+            className="bg-[#10B981] hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Tambah Rombel
           </button>
@@ -1346,18 +1434,31 @@ export default function DataKelas() {
         </div>
       </div>
 
-      {/* INFORMASI STANDAR ROMBEL */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <p className="text-sm font-bold text-blue-800">
-          Aturan Penamaan Rombel Otomatis
-        </p>
-
-        <p className="text-sm text-blue-700 mt-1">
-          Satu rombel: 1. Dua rombel: 1A dan 1B.
-          Tiga rombel: 1A, 1B, dan 1C. Berlaku untuk SD kelas I–VI
-          dan SMP kelas VII–IX.
-        </p>
+      {/* INFORMASI KONFIGURASI DAN ATURAN ROMBEL */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+        <div>
+          <p className="text-sm font-bold text-blue-800">Jenjang Sekolah Aktif</p>
+          <p className="text-sm text-blue-700 mt-1">{labelJenjangSekolah}</p>
+        </div>
+        <div className="border-t border-blue-200 pt-2">
+          <p className="text-sm font-bold text-blue-800">Aturan Penamaan Rombel Otomatis</p>
+          <p className="text-sm text-blue-700 mt-1">
+            Satu rombel menggunakan angka saja, misalnya 1. Jika ada dua rombel menjadi 1A dan 1B; tiga rombel menjadi 1A, 1B, dan 1C. Tingkat ditampilkan dengan angka Romawi.
+          </p>
+        </div>
       </div>
+
+      {konfigurasiError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          {konfigurasiError} Periksa koneksi Firebase dan Firestore Security Rules.
+        </div>
+      )}
+
+      {!loading && jenjangTersedia.length === 0 && !konfigurasiError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+          Jenjang sekolah belum dikonfigurasi. Buka menu Pengaturan Sekolah dan pilih SD, SMP, atau SD dan SMP (Gabungan).
+        </div>
+      )}
 
       {/* PENCARIAN */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
@@ -1371,7 +1472,7 @@ export default function DataKelas() {
         />
 
         <p className="text-sm text-slate-500 font-medium">
-          Total: {kelasList.length} rombel
+          Total: {kelasTampil.length} rombel
         </p>
 
       </div>
@@ -1534,15 +1635,21 @@ export default function DataKelas() {
                   value={jenjang}
                   onChange={(e) => {
                     const nilai = e.target.value;
-
                     setJenjang(nilai);
                     setTingkat(nilai === 'SD' ? '1' : '7');
                   }}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white"
+                  disabled={jenjangTersedia.length <= 1}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-500"
                 >
-                  <option value="SD">SD</option>
-                  <option value="SMP">SMP</option>
+                  {jenjangTersedia.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
                 </select>
+                {jenjangTersedia.length === 1 && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Pilihan jenjang mengikuti konfigurasi sekolah dan hanya dapat diubah melalui menu Pengaturan.
+                  </p>
+                )}
               </div>
 
               {/* TINGKAT */}

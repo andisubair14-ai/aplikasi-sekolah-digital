@@ -194,6 +194,7 @@ export default function DataSiswa() {
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [tahunAjaranList, setTahunAjaranList] =
     useState<TahunAjaran[]>([]);
+  const [jenjangSekolah, setJenjangSekolah] = useState<string[]>([]);
 
   const [masterLoading, setMasterLoading] = useState(true);
   const [fullLoading, setFullLoading] = useState(false);
@@ -273,9 +274,10 @@ export default function DataSiswa() {
   useEffect(() => {
     let kelasReady = false;
     let tahunReady = false;
+    let konfigurasiReady = false;
 
     const periksaSelesai = () => {
-      if (kelasReady && tahunReady) {
+      if (kelasReady && tahunReady && konfigurasiReady) {
         setMasterLoading(false);
       }
     };
@@ -320,9 +322,33 @@ export default function DataSiswa() {
       }
     );
 
+    // Mengikuti konfigurasi jenjang yang disimpan pada Pengaturan Sekolah.
+    const unsubPengaturan = onSnapshot(
+      doc(db, 'pengaturan', 'sekolah'),
+      (snapshot) => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        const konfigurasi = Array.isArray(data.jenjangSekolah)
+          ? ['SD', 'SMP'].filter((jenjang) =>
+              data.jenjangSekolah.includes(jenjang)
+            )
+          : [];
+
+        setJenjangSekolah(konfigurasi);
+        konfigurasiReady = true;
+        periksaSelesai();
+      },
+      (error) => {
+        console.error('Gagal mengambil konfigurasi jenjang sekolah:', error);
+        setLoadError('Konfigurasi jenjang sekolah tidak dapat dibaca. Periksa Pengaturan dan hak akses Firebase.');
+        konfigurasiReady = true;
+        periksaSelesai();
+      }
+    );
+
     return () => {
       unsubKelas();
       unsubTahun();
+      unsubPengaturan();
     };
   }, []);
 
@@ -665,8 +691,15 @@ export default function DataSiswa() {
   // KELAS DINAMIS BERDASARKAN TAHUN AJARAN
   // ==========================================
 
+  const labelJenjangSekolah = jenjangSekolah.length === 2
+    ? 'SD dan SMP (Gabungan)'
+    : jenjangSekolah[0] || 'Belum dikonfigurasi';
+
   const pilihanKelasDinamis = kelasList
-    .filter((item) => item.tahunAjaran === tahunAjaran)
+    .filter((item) =>
+      item.tahunAjaran === tahunAjaran &&
+      jenjangSekolah.includes(String(item.jenjang || '').toUpperCase())
+    )
     .sort((a, b) => {
       if (a.jenjang !== b.jenjang) {
         return a.jenjang === 'SD' ? -1 : 1;
@@ -946,6 +979,12 @@ export default function DataSiswa() {
 
     if (!file) return;
 
+    if (jenjangSekolah.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum dipilih. Buka menu Pengaturan Sekolah terlebih dahulu.');
+      e.target.value = '';
+      return;
+    }
+
     setIsUploading(true);
 
     const reader = new FileReader();
@@ -987,6 +1026,12 @@ export default function DataSiswa() {
           if (!kelasCocok) {
             throw new Error(
               `Kelas "${namaKelas}" tahun ajaran "${tahun || '-'}" pada baris ${index + 2} tidak ditemukan secara unik.`
+            );
+          }
+
+          if (!jenjangSekolah.includes(String(kelasCocok.jenjang || '').toUpperCase())) {
+            throw new Error(
+              `Kelas "${namaKelas}" pada baris ${index + 2} termasuk jenjang ${kelasCocok.jenjang || 'tidak diketahui'}, yang tidak diaktifkan pada Pengaturan Sekolah (${labelJenjangSekolah}).`
             );
           }
 
@@ -1193,16 +1238,22 @@ export default function DataSiswa() {
 
     if (!isAdmin) return;
 
+    if (jenjangSekolah.length === 0) {
+      alert('Konfigurasi jenjang sekolah belum tersedia. Atur SD, SMP, atau gabungan melalui menu Pengaturan Sekolah.');
+      return;
+    }
+
     const kelasTerpilih = kelasList.find(
       (item) =>
         item.id === kelasId &&
         item.namaKelas === kelas &&
-        item.tahunAjaran === tahunAjaran
+        item.tahunAjaran === tahunAjaran &&
+        jenjangSekolah.includes(String(item.jenjang || '').toUpperCase())
     );
 
     if (!kelasTerpilih) {
       alert(
-        'Kelas belum dipilih dengan benar. Silakan pilih ulang kelas siswa.'
+        'Kelas belum dipilih dengan benar atau jenjangnya tidak termasuk konfigurasi sekolah. Silakan pilih ulang kelas siswa.'
       );
       return;
     }
@@ -1504,6 +1555,14 @@ export default function DataSiswa() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
           Anda menggunakan akses monitoring. Data siswa dapat dilihat,
           tetapi tidak dapat ditambah, diedit, atau dihapus.
+        </div>
+      )}
+
+      {/* INFORMASI JENJANG SEKOLAH UNTUK ADMIN */}
+      {isAdmin && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-bold text-blue-800">Konfigurasi jenjang: {labelJenjangSekolah}</p>
+          <p className="text-xs text-blue-700 mt-1">Pilihan rombel pada formulir tambah/edit dan validasi impor Excel mengikuti konfigurasi di Pengaturan Sekolah.</p>
         </div>
       )}
 
@@ -1926,11 +1985,15 @@ export default function DataSiswa() {
                     ))}
                   </select>
 
-                  {pilihanKelasDinamis.length === 0 && (
+                  {jenjangSekolah.length === 0 ? (
                     <p className="text-xs text-red-500 mt-1">
-                      Belum ada kelas untuk tahun ajaran ini.
+                      Jenjang sekolah belum dikonfigurasi. Admin perlu memilih SD, SMP, atau SD dan SMP melalui menu Pengaturan Sekolah.
                     </p>
-                  )}
+                  ) : pilihanKelasDinamis.length === 0 ? (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Belum ada rombel {labelJenjangSekolah} pada tahun ajaran ini. Periksa menu Data Kelas & Rombel.
+                    </p>
+                  ) : null}
 
                   {editId && !kelasId && kelas && (
                     <p className="text-xs text-amber-600 mt-1">
