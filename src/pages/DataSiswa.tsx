@@ -12,7 +12,7 @@ import {
   collection,
   onSnapshot,
   doc,
-  deleteDoc,
+  
   writeBatch,
   getDoc,
   query,
@@ -22,6 +22,7 @@ import {
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 
 // ==========================================
 // TIPE DATA
@@ -62,6 +63,13 @@ interface TahunAjaran {
   tahun: string;
   semester: string;
   status: string;
+}
+
+interface IdentitasSekolah {
+  namaSekolah: string;
+  npsn: string;
+  alamat: string;
+  kepalaSekolah: string;
 }
 
 // ==========================================
@@ -195,6 +203,12 @@ export default function DataSiswa() {
   const [tahunAjaranList, setTahunAjaranList] =
     useState<TahunAjaran[]>([]);
   const [jenjangSekolah, setJenjangSekolah] = useState<string[]>([]);
+  const [identitasSekolah, setIdentitasSekolah] = useState<IdentitasSekolah>({
+    namaSekolah: '',
+    npsn: '',
+    alamat: '',
+    kepalaSekolah: '',
+  });
 
   const [masterLoading, setMasterLoading] = useState(true);
   const [fullLoading, setFullLoading] = useState(false);
@@ -302,8 +316,12 @@ export default function DataSiswa() {
       }
     );
 
+    const queryTahunAjaran = isAdmin
+      ? collection(db, 'tahun_ajaran')
+      : query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif'));
+
     const unsubTahun = onSnapshot(
-      collection(db, 'tahun_ajaran'),
+      queryTahunAjaran,
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -327,6 +345,12 @@ export default function DataSiswa() {
       doc(db, 'pengaturan', 'sekolah'),
       (snapshot) => {
         const data = snapshot.exists() ? snapshot.data() : {};
+        setIdentitasSekolah({
+          namaSekolah: String(data.namaSekolah || ''),
+          npsn: String(data.npsn || ''),
+          alamat: String(data.alamat || ''),
+          kepalaSekolah: String(data.kepalaSekolah || ''),
+        });
         const konfigurasi = Array.isArray(data.jenjangSekolah)
           ? ['SD', 'SMP'].filter((jenjang) =>
               data.jenjangSekolah.includes(jenjang)
@@ -350,7 +374,7 @@ export default function DataSiswa() {
       unsubTahun();
       unsubPengaturan();
     };
-  }, []);
+  }, [isAdmin]);
 
   // ==========================================
   // ADMIN DAN KEPALA SEKOLAH:
@@ -883,11 +907,12 @@ export default function DataSiswa() {
   // DOWNLOAD DATA SISWA
   // ==========================================
 
-  const handleDownloadFiltered = () => {
+  const handleDownloadFiltered = (format: 'excel' | 'pdf') => {
     if (!isAdmin) return;
 
-    let filteredData: any[] = [];
+    let filteredData: Siswa[] = [];
     let fileNameSuffix = 'Semua';
+    let labelPeriode = 'Semua Tahun Ajaran';
 
     if (downloadTAId) {
       const selectedTA = tahunAjaranList.find(
@@ -899,8 +924,8 @@ export default function DataSiswa() {
         return;
       }
 
-      fileNameSuffix =
-        `${selectedTA.tahun.replace('/', '-')}_${selectedTA.semester}`;
+      fileNameSuffix = `${selectedTA.tahun.replace('/', '-')}_${selectedTA.semester}`;
+      labelPeriode = `${selectedTA.tahun} - Semester ${selectedTA.semester}`;
 
       siswaList.forEach((siswa) => {
         if (
@@ -921,13 +946,13 @@ export default function DataSiswa() {
               tahunAjaran: riwayat.tahunAjaran,
               semester: riwayat.semester,
               kelas: riwayat.kelas,
-              status: riwayat.status
+              status: riwayat.status,
             });
           }
         }
       });
     } else {
-      filteredData = siswaList;
+      filteredData = [...siswaList];
     }
 
     if (filteredData.length === 0) {
@@ -935,32 +960,258 @@ export default function DataSiswa() {
       return;
     }
 
-    const dataToExport = filteredData.map((siswa) => ({
-      Nama: siswa.nama,
-      NISN: siswa.nisn,
-      'Tempat Lahir': siswa.tempatLahir,
-      'Tanggal Lahir': siswa.tanggalLahir,
-      Agama: siswa.agama,
-      'Nama Ayah': siswa.namaAyah,
-      'Nama Ibu': siswa.namaIbu,
-      'Pekerjaan Orang Tua': siswa.pekerjaanOrtu,
-      Alamat: siswa.alamat,
-      'Nomor HP': siswa.noHp,
-      'Tahun Ajaran': siswa.tahunAjaran,
-      Semester: siswa.semester || '-',
-      Kelas: siswa.kelas,
-      Status: siswa.status
-    }));
+    const angkaTingkat = (nilai: unknown, namaRombel: string) => {
+      const langsung = Number.parseInt(String(nilai ?? ''), 10);
+      if (Number.isFinite(langsung) && langsung > 0) return langsung;
+      const cocokAngka = String(namaRombel || '').match(/^\s*(\d+)/);
+      if (cocokAngka) return Number(cocokAngka[1]);
+      const romawi: Record<string, number> = {
+        I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6,
+        VII: 7, VIII: 8, IX: 9,
+      };
+      const awal = String(namaRombel || '').trim().toUpperCase().split(/[\s-]/)[0];
+      return romawi[awal] || 99;
+    };
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
+    const dataDenganKelas = filteredData.map((siswa) => {
+      const kelasMaster = cariKelasSiswa(siswa, kelasList);
+      const namaRombel = kelasMaster?.namaKelas || siswa.kelas || '-';
+      const tingkat = angkaTingkat(kelasMaster?.tingkat, namaRombel);
+      const jenjang = String(
+        kelasMaster?.jenjang || (tingkat >= 7 ? 'SMP' : tingkat <= 6 ? 'SD' : '')
+      ).toUpperCase();
+      return {
+        siswa,
+        kelasMaster,
+        namaRombel,
+        tingkat,
+        jenjang,
+        kunciKelas: kelasMaster?.id || `${jenjang}|${tingkat}|${namaRombel}|${siswa.tahunAjaran || ''}`,
+      };
+    }).sort((a, b) => {
+      const urutanJenjang = (nilai: string) => nilai === 'SD' ? 0 : nilai === 'SMP' ? 1 : 2;
+      const selisihJenjang = urutanJenjang(a.jenjang) - urutanJenjang(b.jenjang);
+      if (selisihJenjang !== 0) return selisihJenjang;
+      if (a.tingkat !== b.tingkat) return a.tingkat - b.tingkat;
+      const selisihKelas = a.namaRombel.localeCompare(b.namaRombel, 'id', { numeric: true });
+      if (selisihKelas !== 0) return selisihKelas;
+      const selisihTahun = String(a.siswa.tahunAjaran || '').localeCompare(String(b.siswa.tahunAjaran || ''), 'id');
+      if (selisihTahun !== 0) return selisihTahun;
+      return String(a.siswa.nama || '').localeCompare(String(b.siswa.nama || ''), 'id');
+    });
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Data Siswa');
+    if (format === 'excel') {
+      const dataToExport = dataDenganKelas.map((item, index) => ({
+        No: index + 1,
+        Jenjang: item.jenjang || '-',
+        Tingkat: item.tingkat < 99 ? item.tingkat : '-',
+        Rombel: item.namaRombel,
+        Nama: item.siswa.nama || '',
+        NISN: item.siswa.nisn || '',
+        'Tempat Lahir': item.siswa.tempatLahir || '',
+        'Tanggal Lahir': item.siswa.tanggalLahir || '',
+        Agama: item.siswa.agama || '',
+        'Nama Ayah': item.siswa.namaAyah || '',
+        'Nama Ibu': item.siswa.namaIbu || '',
+        'Pekerjaan Orang Tua': item.siswa.pekerjaanOrtu || '',
+        Alamat: item.siswa.alamat || '',
+        'Nomor HP': item.siswa.noHp || '',
+        'Tahun Ajaran': item.siswa.tahunAjaran || '',
+        Semester: item.siswa.semester || '-',
+        Status: item.siswa.status || 'Aktif',
+      }));
 
-    XLSX.writeFile(
-      wb,
-      `Data_Siswa_${fileNameSuffix}.xlsx`
-    );
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 10 }, { wch: 9 }, { wch: 12 },
+        { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 15 },
+        { wch: 12 }, { wch: 22 }, { wch: 22 }, { wch: 22 },
+        { wch: 35 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Data Siswa');
+      XLSX.writeFile(wb, `Data_Siswa_${fileNameSuffix}.xlsx`);
+    } else {
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const lebarHalaman = pdf.internal.pageSize.getWidth();
+      const tinggiHalaman = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const lebarKolom = [8, 41, 22, 17, 33, 40, 76, 20, 20];
+      const judulKolom = ['No', 'Nama Siswa', 'NISN', 'Kelas', 'Tempat / Tgl Lahir', 'Nama Orang Tua', 'Alamat', 'No. HP', 'Status'];
+      const lebarTabel = lebarKolom.reduce((total, nilai) => total + nilai, 0);
+      const xAwal = (lebarHalaman - lebarTabel) / 2;
+      let posisiY = 0;
+
+      const gambarKepalaTabel = () => {
+        const tinggi = 8;
+        pdf.setFillColor(8, 43, 98);
+        pdf.rect(xAwal, posisiY, lebarTabel, tinggi, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7);
+        pdf.setTextColor(255, 255, 255);
+        let x = xAwal;
+        judulKolom.forEach((judul, index) => {
+          const teks = pdf.splitTextToSize(judul, lebarKolom[index] - 3);
+          const tinggiTeks = teks.length * 2.8;
+          const yTeks = posisiY + Math.max(3.2, (tinggi - tinggiTeks) / 2 + 2.2);
+          pdf.text(teks, x + 1.5, yTeks);
+          x += lebarKolom[index];
+        });
+        posisiY += tinggi;
+      };
+
+      const gambarKopHalaman = () => {
+        pdf.setTextColor(8, 43, 98);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(14);
+        const namaSekolah = pdf.splitTextToSize(
+          identitasSekolah.namaSekolah || 'NAMA SEKOLAH BELUM DIATUR',
+          lebarHalaman - 50
+        );
+        pdf.text(namaSekolah.slice(0, 2), lebarHalaman / 2, 12, { align: 'center' });
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        if (identitasSekolah.alamat) {
+          const barisAlamat = pdf.splitTextToSize(identitasSekolah.alamat, lebarHalaman - 50);
+          pdf.text(barisAlamat.slice(0, 2), lebarHalaman / 2, 19, { align: 'center' });
+        }
+        if (identitasSekolah.npsn) {
+          pdf.text(`NPSN: ${identitasSekolah.npsn}`, lebarHalaman / 2, 26, { align: 'center' });
+        }
+        pdf.setDrawColor(8, 43, 98);
+        pdf.setLineWidth(0.6);
+        pdf.line(margin, 29, lebarHalaman - margin, 29);
+      };
+
+      const gambarHeaderHalaman = () => {
+        gambarKopHalaman();
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(12);
+        pdf.setTextColor(8, 43, 98);
+        pdf.text('DAFTAR DATA SISWA', lebarHalaman / 2, 36, { align: 'center' });
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(55, 65, 81);
+        pdf.text(`Periode: ${labelPeriode}`, lebarHalaman / 2, 41, { align: 'center' });
+        posisiY = 47;
+        gambarKepalaTabel();
+      };
+
+      const halamanBaru = () => {
+        pdf.addPage();
+        gambarHeaderHalaman();
+      };
+
+      const gambarJudulKelas = (labelKelas: string) => {
+        pdf.setFillColor(235, 242, 251);
+        pdf.rect(xAwal, posisiY, lebarTabel, 6, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.2);
+        pdf.setTextColor(8, 43, 98);
+        pdf.text(labelKelas, xAwal + 2, posisiY + 4);
+        pdf.setDrawColor(190, 207, 229);
+        pdf.setLineWidth(0.2);
+        pdf.line(xAwal, posisiY + 6, xAwal + lebarTabel, posisiY + 6);
+        posisiY += 6;
+      };
+
+      gambarHeaderHalaman();
+
+      let kelompokTerakhir = '';
+      dataDenganKelas.forEach((item, index) => {
+        const siswa = item.siswa;
+        const orangTua = [
+          siswa.namaAyah ? `Ayah: ${siswa.namaAyah}` : '',
+          siswa.namaIbu ? `Ibu: ${siswa.namaIbu}` : '',
+        ].filter(Boolean).join('\n') || '-';
+        const lahir = [siswa.tempatLahir, siswa.tanggalLahir].filter(Boolean).join(', ') || '-';
+        const nilai = [
+          String(index + 1),
+          siswa.nama || '-',
+          siswa.nisn || '-',
+          item.namaRombel,
+          lahir,
+          orangTua,
+          siswa.alamat || '-',
+          siswa.noHp || '-',
+          siswa.status || 'Aktif',
+        ];
+        const barisTeks = nilai.map((teks, kolom) =>
+          pdf.splitTextToSize(String(teks), lebarKolom[kolom] - 3)
+        );
+        const jumlahBaris = Math.max(...barisTeks.map((baris) => baris.length));
+        const tinggiBaris = Math.max(7, jumlahBaris * 3.2 + 2.5);
+        const labelKelas = `${item.jenjang || 'Jenjang tidak diketahui'} - Tingkat ${item.tingkat < 99 ? item.tingkat : '-'} - Rombel ${item.namaRombel}`;
+        const grupBerubah = item.kunciKelas !== kelompokTerakhir;
+        const tinggiJudulKelas = grupBerubah ? 6 : 0;
+
+        if (posisiY + tinggiJudulKelas + tinggiBaris > tinggiHalaman - 14) {
+          halamanBaru();
+          gambarJudulKelas(labelKelas);
+          kelompokTerakhir = item.kunciKelas;
+        } else if (grupBerubah) {
+          gambarJudulKelas(labelKelas);
+          kelompokTerakhir = item.kunciKelas;
+        }
+
+        // Baris tabel dibuat tanpa kotak per sel agar garis lebih rapi dan konsisten.
+        if (index % 2 === 1) {
+          pdf.setFillColor(248, 250, 253);
+          pdf.rect(xAwal, posisiY, lebarTabel, tinggiBaris, 'F');
+        }
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(6.7);
+        pdf.setTextColor(35, 45, 60);
+        let x = xAwal;
+        barisTeks.forEach((baris, kolom) => {
+          pdf.text(baris, x + 1.5, posisiY + 3.3);
+          x += lebarKolom[kolom];
+        });
+        pdf.setDrawColor(215, 222, 232);
+        pdf.setLineWidth(0.18);
+        pdf.line(xAwal, posisiY + tinggiBaris, xAwal + lebarTabel, posisiY + tinggiBaris);
+        posisiY += tinggiBaris;
+      });
+
+      // Pengesahan cukup berupa blok tanda tangan tanpa kotak stempel.
+      if (posisiY + 38 > tinggiHalaman - 6) {
+        pdf.addPage();
+        gambarKopHalaman();
+        posisiY = tinggiHalaman - 47;
+      } else {
+        posisiY += 8;
+      }
+      const xPengesahan = lebarHalaman - margin - 43;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(35, 45, 60);
+      pdf.text(`Tanggal cetak: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, xPengesahan, posisiY, { align: 'center' });
+      pdf.text('Mengetahui,', xPengesahan, posisiY + 5, { align: 'center' });
+      pdf.text('Kepala Sekolah', xPengesahan, posisiY + 10, { align: 'center' });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setDrawColor(35, 45, 60);
+      pdf.setLineWidth(0.2);
+      pdf.line(xPengesahan - 28, posisiY + 25, xPengesahan + 28, posisiY + 25);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.text(identitasSekolah.kepalaSekolah || '........................................', xPengesahan, posisiY + 30, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7);
+      pdf.text('NIP. ........................................', xPengesahan, posisiY + 34, { align: 'center' });
+
+      const jumlahHalaman = pdf.getNumberOfPages();
+      for (let halaman = 1; halaman <= jumlahHalaman; halaman += 1) {
+        pdf.setPage(halaman);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(`Halaman ${halaman} dari ${jumlahHalaman}`, lebarHalaman - margin, tinggiHalaman - 4, { align: 'right' });
+      }
+
+      pdf.save(`Data_Siswa_${fileNameSuffix}.pdf`);
+    }
 
     setIsDownloadModalOpen(false);
     setDownloadTAId('');
@@ -1745,22 +1996,35 @@ export default function DataSiswa() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 border-t pt-4">
-
-                <button
-                  onClick={() => setIsDownloadModalOpen(false)}
-                  className="px-5 py-2.5 text-slate-600 font-bold"
-                >
-                  Batal
-                </button>
-
-                <button
-                  onClick={handleDownloadFiltered}
-                  className="px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-lg"
-                >
-                  Download Excel
-                </button>
-
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-500">Pilih format file yang ingin diunduh:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadFiltered('excel')}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-extrabold text-white shadow-sm transition hover:bg-emerald-700"
+                  >
+                    <span className="text-lg">X</span>
+                    Download Excel (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadFiltered('pdf')}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-[#B42318] px-5 py-3 font-extrabold text-white shadow-sm transition hover:bg-red-800"
+                  >
+                    <span className="text-lg">PDF</span>
+                    Download PDF (.pdf)
+                  </button>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsDownloadModalOpen(false)}
+                    className="px-5 py-2 text-slate-600 font-bold"
+                  >
+                    Batal
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -2093,3 +2357,4 @@ export default function DataSiswa() {
     </div>
   );
 }
+ 

@@ -197,7 +197,7 @@ export default function AdminDashboard() {
     return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [kelasAktif]);
 
-  const cardClass = 'bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden';
+  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative overflow-hidden sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
@@ -223,7 +223,7 @@ export default function AdminDashboard() {
 
       {errorMessage && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">{errorMessage}</div>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+      <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
         <div className={cardClass}>
           <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4"><StatIcon name="users" /></div>
           <p className="text-slate-500 font-semibold text-sm">Total Siswa Aktif</p>

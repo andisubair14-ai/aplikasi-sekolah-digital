@@ -36,6 +36,43 @@ interface Kelas {
   urutanRombel?: number;
 }
 
+interface PenugasanWali {
+  id?: string;
+  namaKelas?: string;
+  tahunAjaran?: string;
+  waliKelas?: string | null;
+  waliKelasId?: string | null;
+}
+
+const normalisasiNamaPegawai = (nilai: unknown): string =>
+  String(nilai || '').trim().toLocaleLowerCase('id-ID');
+
+// Cari penugasan wali kelas yang sudah ada pada tahun ajaran yang sama.
+// ID menjadi acuan utama; nama hanya dipakai untuk mendeteksi dokumen lama
+// yang belum memiliki waliKelasId.
+const cariKonflikWaliKelas = (
+  daftarKelas: PenugasanWali[],
+  guruId: string,
+  guruNama: string,
+  tahun: string,
+  idKelasDikecualikan?: string
+): PenugasanWali | undefined => {
+  const namaNormal = normalisasiNamaPegawai(guruNama);
+
+  return daftarKelas.find((item) => {
+    if (item.id && item.id === idKelasDikecualikan) return false;
+    if (String(item.tahunAjaran || '').trim() !== String(tahun || '').trim()) return false;
+
+    const cocokId = item.waliKelasId === guruId;
+    const cocokDataLama =
+      !item.waliKelasId &&
+      namaNormal !== '' &&
+      normalisasiNamaPegawai(item.waliKelas) === namaNormal;
+
+    return cocokId || cocokDataLama;
+  });
+};
+
 // ==========================================
 // KONVERSI TINGKAT ANGKA KE ROMAWI
 // ==========================================
@@ -329,6 +366,18 @@ export default function DataKelas() {
       guru.jabatan !== 'Tenaga Kependidikan' &&
       guru.nama
   );
+
+  const getKonflikPenugasanWali = (guru: Guru) => {
+    if (!tahunAjaran) return undefined;
+
+    return cariKonflikWaliKelas(
+      kelasList,
+      guru.id,
+      guru.nama,
+      tahunAjaran,
+      editId || undefined
+    );
+  };
 
   // ==========================================
   // PENGURUTAN DATA ROMBEL
@@ -864,9 +913,19 @@ export default function DataKelas() {
               );
             }
 
-            if (guruCocok.length === 1) {
-              waliId = guruCocok[0].id;
+            if (guruCocok.length === 0) {
+              throw new Error(
+                `Wali kelas "${namaWaliExcel}" pada baris ${index + 2} tidak ditemukan di Data Pegawai. Pilih nama yang sesuai dengan data pegawai.`
+              );
             }
+
+            if (guruCocok[0].jabatan === 'Tenaga Kependidikan') {
+              throw new Error(
+                `"${namaWaliExcel}" pada baris ${index + 2} tercatat sebagai Tenaga Kependidikan dan tidak dapat ditugaskan sebagai Wali Kelas.`
+              );
+            }
+
+            waliId = guruCocok[0].id;
           }
 
           return {
@@ -878,6 +937,49 @@ export default function DataKelas() {
             namaKelas: '',
             urutanRombel: 0
           };
+        });
+
+        // Validasi penugasan wali sebelum satu pun dokumen rombel ditulis.
+        // Satu pegawai hanya boleh menjadi wali pada satu rombel per tahun ajaran.
+        const snapshotKelasLama = await getDocs(collection(db, 'kelas'));
+        const kelasLama = snapshotKelasLama.docs.map((item) => ({
+          id: item.id,
+          ...item.data()
+        })) as PenugasanWali[];
+
+        const penugasanDalamFile = new Map<string, number>();
+
+        dataSiapSimpan.forEach((item, index) => {
+          if (!item.waliKelasId) return;
+
+          const guru = guruList.find((pegawai) => pegawai.id === item.waliKelasId);
+          if (!guru) {
+            throw new Error(`Data pegawai untuk Wali Kelas pada baris ${index + 2} tidak ditemukan.`);
+          }
+
+          const konflikLama = cariKonflikWaliKelas(
+            kelasLama,
+            guru.id,
+            guru.nama,
+            item.tahunAjaran
+          );
+
+          if (konflikLama) {
+            throw new Error(
+              `Pegawai ${guru.nama} sudah menjadi Wali Kelas rombel ${konflikLama.namaKelas || '(nama rombel lama)'} pada tahun ajaran ${item.tahunAjaran}. Satu pegawai hanya boleh menjadi Wali Kelas pada satu rombel dalam tahun ajaran yang sama.`
+            );
+          }
+
+          const kunciPenugasan = `${item.tahunAjaran}::${guru.id}`;
+          const barisSebelumnya = penugasanDalamFile.get(kunciPenugasan);
+
+          if (barisSebelumnya !== undefined) {
+            throw new Error(
+              `Pegawai ${guru.nama} dipilih sebagai Wali Kelas lebih dari satu kali pada file Excel (baris ${barisSebelumnya} dan ${index + 2}). Periksa kembali file tersebut.`
+            );
+          }
+
+          penugasanDalamFile.set(kunciPenugasan, index + 2);
         });
 
         const kelasRef = collection(db, 'kelas');
@@ -1063,6 +1165,23 @@ export default function DataKelas() {
         id: item.id,
         ...item.data()
       })) as any[];
+
+      if (waliTerpilih) {
+        const konflikWali = cariKonflikWaliKelas(
+          daftarLama,
+          waliTerpilih.id,
+          waliTerpilih.nama,
+          tahunAjaran,
+          editId || undefined
+        );
+
+        if (konflikWali) {
+          alert(
+            `Pegawai ${waliTerpilih.nama} sudah menjadi Wali Kelas pada rombel ${konflikWali.namaKelas || '(nama rombel lama)'} untuk tahun ajaran ${tahunAjaran}.\n\nSatu pegawai hanya boleh menjadi Wali Kelas pada satu rombel dalam tahun ajaran yang sama.`
+          );
+          return;
+        }
+      }
 
       let idTarget = editId;
 
@@ -1707,16 +1826,28 @@ export default function DataKelas() {
                     -- Belum Ditentukan --
                   </option>
 
-                  {guruBisaMenjadiWali.map((guru) => (
-                    <option key={guru.id} value={guru.id}>
-                      {guru.nama} ({guru.jabatan})
-                    </option>
-                  ))}
+                  {guruBisaMenjadiWali.map((guru) => {
+                    const konflik = getKonflikPenugasanWali(guru);
+                    const sudahDipilihDiRombelLain = Boolean(konflik);
+
+                    return (
+                      <option
+                        key={guru.id}
+                        value={guru.id}
+                        disabled={sudahDipilihDiRombelLain && guru.id !== waliKelasId}
+                      >
+                        {guru.nama} ({guru.jabatan})
+                        {konflik
+                          ? ` — sudah menjadi wali ${konflik.namaKelas || 'rombel lain'}`
+                          : ''}
+                      </option>
+                    );
+                  })}
 
                 </select>
 
                 <p className="text-xs text-slate-500 mt-1">
-                  Wali kelas ditautkan langsung menggunakan ID data pegawai.
+                  Wali kelas ditautkan langsung menggunakan ID data pegawai. Satu pegawai hanya dapat ditugaskan pada satu rombel untuk tahun ajaran yang sama. Pegawai yang sudah menjadi wali pada rombel lain akan dinonaktifkan dari pilihan.
                 </p>
               </div>
 

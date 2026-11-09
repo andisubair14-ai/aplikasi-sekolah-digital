@@ -11,7 +11,6 @@ import {
   collection,
   onSnapshot,
   doc,
-  updateDoc,
   writeBatch,
   getDocs,
   query,
@@ -533,7 +532,64 @@ export default function DataPegawai() {
       // tidak terhapus mendadak. Tampilan baru tidak menggunakannya.
 
       if (editId) {
-        await updateDoc(doc(db, 'guru', editId), dataBaru);
+        const guruLama = guruList.find((item) => item.id === editId);
+
+        if (!guruLama) {
+          throw new Error('Data pegawai yang akan diperbarui tidak ditemukan. Muat ulang halaman lalu coba kembali.');
+        }
+
+        const namaLama = String(guruLama.nama || '').trim();
+        const namaLamaNormal = namaLama.toLocaleLowerCase('id-ID');
+
+        // Data rombel lama mungkin hanya menyimpan nama wali kelas,
+        // belum menyimpan waliKelasId. Tautkan otomatis hanya jika
+        // nama lama tersebut memang unik di Data Pegawai.
+        const rombelLamaDenganNama = kelasList.filter((item) =>
+          !item.waliKelasId &&
+          String(item.waliKelas || '').trim().toLocaleLowerCase('id-ID') === namaLamaNormal
+        );
+
+        const jumlahPegawaiDenganNamaSama = guruList.filter((item) =>
+          String(item.nama || '').trim().toLocaleLowerCase('id-ID') === namaLamaNormal
+        ).length;
+
+        if (rombelLamaDenganNama.length > 0 && jumlahPegawaiDenganNamaSama !== 1) {
+          alert(
+            'Nama pegawai lama ditemukan lebih dari satu dan masih dipakai pada rombel lama yang belum tertaut dengan ID. Agar tidak salah menghubungkan wali kelas, buka Data Kelas & Rombel dan tautkan rombel tersebut ke pegawai yang benar sebelum mengganti nama.'
+          );
+          return;
+        }
+
+        // Sinkronkan nama wali kelas di semua rombel yang terhubung
+        // dengan ID pegawai ini, termasuk data lama yang unik.
+        const rombelTerkait = kelasList.filter((item) =>
+          item.waliKelasId === editId ||
+          (!item.waliKelasId && rombelLamaDenganNama.some((lama) => lama.id === item.id))
+        );
+
+        const operasi = [
+          {
+            ref: doc(db, 'guru', editId),
+            data: dataBaru
+          },
+          ...rombelTerkait.map((item) => ({
+            ref: doc(db, 'kelas', item.id),
+            data: {
+              waliKelasId: editId,
+              waliKelas: dataBaru.nama
+            }
+          }))
+        ];
+
+        // Firestore membatasi maksimal 500 operasi per batch.
+        // Gunakan potongan 400 agar tetap aman untuk sekolah besar.
+        for (let i = 0; i < operasi.length; i += 400) {
+          const batch = writeBatch(db);
+          operasi.slice(i, i + 400).forEach((item) => {
+            batch.update(item.ref, item.data);
+          });
+          await batch.commit();
+        }
       } else {
         const batch = writeBatch(db);
         const refBaru = doc(collection(db, 'guru'));

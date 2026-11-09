@@ -19,7 +19,7 @@ import {
 } from '../lib/dashboardUtils';
 
 type ClassRow = DashboardRow & { tahunAjaran?: string; jenjang?: string };
-type YearRow = DashboardRow & { tahun?: string; status?: string };
+type YearRow = DashboardRow & { tahun?: string; semester?: string; status?: string };
 type JournalRow = DashboardRow & { status?: string };
 
 const COLORS = ['#10B981', '#F59E0B', '#E2E8F0'];
@@ -141,7 +141,7 @@ export default function KepsekDashboard() {
         setKelasList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as ClassRow[]);
         markReady('kelas');
       }, handleError('kelas', 'kelas')),
-      onSnapshot(collection(db, 'tahun_ajaran'), (snap) => {
+      onSnapshot(query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')), (snap) => {
         setTahunList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as YearRow[]);
         markReady('tahun');
       }, handleError('tahun ajaran', 'tahun')),
@@ -162,7 +162,12 @@ export default function KepsekDashboard() {
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [today, weekStart]);
 
-  const activeYear = tahunList.find((item) => item.status === 'Aktif')?.tahun || null;
+  const activePeriod = useMemo(
+    () => tahunList.find((item) => item.status === 'Aktif') || null,
+    [tahunList]
+  );
+  const activeYear = activePeriod?.tahun || null;
+  const activeSemester = activePeriod?.semester || null;
   const siswaAktif = useMemo(
     () => siswaList.filter((item) => isStudentActiveForYear(item, activeYear)),
     [siswaList, activeYear]
@@ -180,9 +185,13 @@ export default function KepsekDashboard() {
     [absensiList, siswaAktif.length]
   );
   const hasTrendData = trend.some((item) => item.hadir !== null);
-  const jurnalMenunggu = jurnalList.filter((item) => item.status === 'Dikirim').length;
+  const jurnalMenunggu = jurnalList.filter((item) =>
+    item.status === 'Dikirim' &&
+    (!activeYear || item.tahunAjaran === activeYear) &&
+    (!activeSemester || item.semester === activeSemester)
+  ).length;
 
-  const cardClass = 'bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden';
+  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative overflow-hidden sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
@@ -193,14 +202,25 @@ export default function KepsekDashboard() {
             <h1 className="text-xl sm:text-2xl text-blue-100 font-medium mb-1">Executive Dashboard</h1>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-wide">Selamat Datang, {namaKepsek}</h2>
             <p className="text-blue-50 text-sm sm:text-base font-medium">Ringkasan monitoring sekolah berdasarkan data aktual.</p>
-            <p className="text-blue-100 text-xs mt-1">{activeYear ? `Tahun Ajaran ${activeYear}` : 'Semua tahun ajaran — belum ada tahun ajaran aktif'}</p>
+            {activePeriod ? (
+              <div className="mt-3 inline-flex flex-col gap-1 rounded-xl border border-white/20 bg-white/15 px-4 py-2 shadow-sm sm:flex-row sm:items-center sm:gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Periode Akademik Berjalan</span>
+                <span className="text-sm font-extrabold text-white sm:text-base">
+                  Tahun Pelajaran {activePeriod.tahun} <span className="text-blue-200">·</span> Semester {activeSemester || '-'}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-3 inline-flex rounded-xl border border-amber-200/40 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-100">
+                Belum ada tahun pelajaran dan semester aktif
+              </p>
+            )}
           </div>
         </div>
       </div>
 
       {errorMessage && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">{errorMessage}</div>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+      <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
         <div className={cardClass}>
           <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="users" /></div>
           <p className="text-slate-500 font-semibold text-sm">Total Siswa Aktif</p>

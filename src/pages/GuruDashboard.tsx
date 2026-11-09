@@ -28,8 +28,8 @@ type ClassRow = DashboardRow & {
   kelasDiampu?: string[];
 };
 
-type YearRow = DashboardRow & { tahun?: string; status?: string };
-type JournalRow = DashboardRow & { guruId?: string; namaGuru?: string; tanggal?: string; createdAt?: string; kelas?: string };
+type YearRow = DashboardRow & { tahun?: string; semester?: string; status?: string };
+type JournalRow = DashboardRow & { userId?: string; guruId?: string; namaGuru?: string; tanggal?: string; createdAt?: string; kelas?: string };
 
 const COLORS = ['#10B981', '#F59E0B', '#E2E8F0'];
 
@@ -111,13 +111,15 @@ export default function GuruDashboard() {
   const { userData } = useAuth();
   const namaGuru = userData?.nama || 'Bapak/Ibu Guru';
   const guruId = userData?.guruId || null;
+  const uid = userData?.uid || null;
 
   const [guruData, setGuruData] = useState<DashboardRow | null>(null);
   const [kelasList, setKelasList] = useState<ClassRow[]>([]);
   const [siswaList, setSiswaList] = useState<DashboardRow[]>([]);
   const [tahunList, setTahunList] = useState<YearRow[]>([]);
   const [absensiList, setAbsensiList] = useState<DashboardRow[]>([]);
-  const [jurnalList, setJurnalList] = useState<JournalRow[]>([]);
+  const [jurnalUserIdList, setJurnalUserIdList] = useState<JournalRow[]>([]);
+  const [jurnalGuruIdList, setJurnalGuruIdList] = useState<JournalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -125,14 +127,14 @@ export default function GuruDashboard() {
   const weekStart = getLastSevenDays()[0].tanggal;
 
   useEffect(() => {
-    if (!guruId) {
+    if (!guruId || !uid) {
       setLoading(false);
       setErrorMessage('Akun Guru belum terhubung dengan data pegawai. Hubungkan akun melalui menu Manajemen Pengguna.');
       return;
     }
 
     const ready: Record<string, boolean> = {
-      guru: false, kelas: false, siswa: false, tahun: false, absensi: false, jurnal: false
+      guru: false, kelas: false, siswa: false, tahun: false, absensi: false, jurnalUserId: false, jurnalGuruId: false
     };
     const markReady = (key: string) => {
       if (!ready[key]) ready[key] = true;
@@ -157,7 +159,7 @@ export default function GuruDashboard() {
         setSiswaList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
         markReady('siswa');
       }, handleError('siswa', 'siswa')),
-      onSnapshot(collection(db, 'tahun_ajaran'), (snap) => {
+      onSnapshot(query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')), (snap) => {
         setTahunList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as YearRow[]);
         markReady('tahun');
       }, handleError('tahun ajaran', 'tahun')),
@@ -169,16 +171,41 @@ export default function GuruDashboard() {
         },
         handleError('absensi', 'absensi')
       ),
-      onSnapshot(collection(db, 'jurnal'), (snap) => {
-        setJurnalList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as JournalRow[]);
-        markReady('jurnal');
-      }, handleError('jurnal', 'jurnal'))
+      // Query dipisah agar setiap permintaan sesuai dengan aturan kepemilikan jurnal.
+      // Jurnal baru menyimpan userId dan guruId sebagai UID akun Firebase.
+      onSnapshot(
+        query(collection(db, 'jurnal'), where('userId', '==', uid)),
+        (snap) => {
+          setJurnalUserIdList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as JournalRow[]);
+          markReady('jurnalUserId');
+        },
+        handleError('jurnal milik akun', 'jurnalUserId')
+      ),
+      // Query kedua menjaga kompatibilitas dengan jurnal lama yang hanya memiliki guruId.
+      onSnapshot(
+        query(collection(db, 'jurnal'), where('guruId', '==', uid)),
+        (snap) => {
+          setJurnalGuruIdList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as JournalRow[]);
+          markReady('jurnalGuruId');
+        },
+        handleError('jurnal berdasarkan UID guru', 'jurnalGuruId')
+      )
     ];
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [guruId, today, weekStart]);
+  }, [guruId, uid, today, weekStart]);
 
-  const activeYear = tahunList.find((item) => item.status === 'Aktif')?.tahun || null;
+  const jurnalList = useMemo(() => {
+    const gabungan = new Map<string, JournalRow>();
+    [...jurnalUserIdList, ...jurnalGuruIdList].forEach((jurnal) => gabungan.set(String(jurnal.id), jurnal));
+    return Array.from(gabungan.values());
+  }, [jurnalUserIdList, jurnalGuruIdList]);
+
+  const activePeriod = useMemo(
+    () => tahunList.find((item) => item.status === 'Aktif') || null,
+    [tahunList]
+  );
+  const activeYear = activePeriod?.tahun || null;
 
   const kelasAktif = useMemo(() => {
     const padaTahunAktif = activeYear
@@ -247,15 +274,16 @@ export default function GuruDashboard() {
 
   const jurnalBulanIni = useMemo(() => {
     return jurnalList.filter((item) => {
-      const milikGuru = item.guruId
-        ? item.guruId === guruId
-        : item.namaGuru === namaGuru;
+      const milikGuru = item.userId === uid || item.guruId === uid;
       const tanggalJurnal = item.tanggal || item.createdAt;
-      return milikGuru && isThisMonth(tanggalJurnal);
+      const sesuaiPeriode =
+        (!activeYear || item.tahunAjaran === activeYear) &&
+        (!activePeriod?.semester || item.semester === activePeriod.semester);
+      return milikGuru && sesuaiPeriode && isThisMonth(tanggalJurnal);
     }).length;
-  }, [jurnalList, guruId, namaGuru]);
+  }, [jurnalList, uid, activeYear, activePeriod?.semester]);
 
-  const cardClass = 'bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden';
+  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative overflow-hidden sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
@@ -266,7 +294,18 @@ export default function GuruDashboard() {
             <h1 className="text-xl sm:text-2xl text-blue-100 font-medium mb-1">Selamat Datang,</h1>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-wide">{namaGuru}</h2>
             <p className="text-blue-50 text-sm sm:text-base font-medium">Ringkasan tugas mengajar dan kehadiran rombel Anda.</p>
-            <p className="text-blue-100 text-xs mt-1">{activeYear ? `Tahun Ajaran ${activeYear}` : 'Semua tahun ajaran — belum ada tahun ajaran aktif'}</p>
+            {activePeriod ? (
+              <div className="mt-3 inline-flex flex-col gap-1 rounded-xl border border-white/20 bg-white/15 px-4 py-2 shadow-sm sm:flex-row sm:items-center sm:gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Periode Akademik Berjalan</span>
+                <span className="text-sm font-extrabold text-white sm:text-base">
+                  Tahun Pelajaran {activePeriod.tahun} <span className="text-blue-200">·</span> Semester {activePeriod.semester || '-'}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-3 inline-flex rounded-xl border border-amber-200/40 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-100">
+                Belum ada tahun pelajaran dan semester aktif
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -274,7 +313,7 @@ export default function GuruDashboard() {
       {errorMessage && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">{errorMessage}</div>}
       {!guruData && guruId && !loading && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">Profil pegawai untuk akun ini tidak ditemukan pada koleksi guru.</div>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+      <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
         <div className={cardClass}>
           <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="book-open" /></div>
           <p className="text-slate-500 font-semibold text-sm">Rombel yang Diampu</p>

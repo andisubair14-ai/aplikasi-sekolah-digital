@@ -2,7 +2,8 @@ import { useState, useEffect, type FormEvent } from 'react';
 import {
   collection,
   doc,
-  getDoc,
+  deleteField,
+  onSnapshot,
   getDocs,
   setDoc,
 } from 'firebase/firestore';
@@ -12,6 +13,54 @@ const URUTAN_JENJANG = ['SD', 'SMP'];
 
 const urutkanJenjang = (items: string[]) =>
   URUTAN_JENJANG.filter((item) => items.includes(item));
+
+type StatusKoneksiWhatsApp = 'not_connected' | 'pending' | 'connected' | 'error';
+type StatusVerifikasiWhatsApp = 'not_started' | 'pending' | 'verified' | 'failed';
+type StatusTemplateWhatsApp =
+  | 'not_submitted'
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'paused'
+  | 'disabled';
+
+const statusKoneksiLabel: Record<StatusKoneksiWhatsApp, string> = {
+  not_connected: 'Belum dihubungkan',
+  pending: 'Proses penghubungan',
+  connected: 'Terhubung',
+  error: 'Perlu tindakan',
+};
+
+const statusVerifikasiLabel: Record<StatusVerifikasiWhatsApp, string> = {
+  not_started: 'Belum diverifikasi',
+  pending: 'Menunggu verifikasi',
+  verified: 'Terverifikasi',
+  failed: 'Verifikasi gagal',
+};
+
+const statusTemplateLabel: Record<StatusTemplateWhatsApp, string> = {
+  not_submitted: 'Belum diajukan',
+  pending: 'Menunggu peninjauan Meta',
+  approved: 'Disetujui Meta',
+  rejected: 'Ditolak — perlu perbaikan',
+  paused: 'Dijeda oleh Meta',
+  disabled: 'Dinonaktifkan oleh Meta',
+};
+
+const statusKoneksiValid = (nilai: unknown): StatusKoneksiWhatsApp =>
+  nilai === 'pending' || nilai === 'connected' || nilai === 'error'
+    ? nilai
+    : 'not_connected';
+
+const statusVerifikasiValid = (nilai: unknown): StatusVerifikasiWhatsApp =>
+  nilai === 'pending' || nilai === 'verified' || nilai === 'failed'
+    ? nilai
+    : 'not_started';
+
+const statusTemplateValid = (nilai: unknown): StatusTemplateWhatsApp =>
+  nilai === 'pending' || nilai === 'approved' || nilai === 'rejected' || nilai === 'paused' || nilai === 'disabled'
+    ? nilai
+    : 'not_submitted';
 
 export default function Pengaturan() {
   const [loading, setLoading] = useState(true);
@@ -25,6 +74,21 @@ export default function Pengaturan() {
   const [website, setWebsite] = useState('');
   const [email, setEmail] = useState('');
 
+  // Nomor ini hanya dibaca dari hasil onboarding Meta oleh backend.
+  // Admin tidak mengetik nomor secara manual pada halaman ini.
+  const [nomorWhatsappTerhubung, setNomorWhatsappTerhubung] = useState('');
+  const [nomorWhatsappLama, setNomorWhatsappLama] = useState('');
+  const [backendWhatsAppSiap, setBackendWhatsAppSiap] = useState(false);
+
+  // Status ini kelak diperbarui oleh backend setelah menerima respons/webhook Meta.
+  // Admin hanya dapat melihat statusnya dari halaman ini.
+  const [statusKoneksiWhatsApp, setStatusKoneksiWhatsApp] =
+    useState<StatusKoneksiWhatsApp>('not_connected');
+  const [statusVerifikasiWhatsApp, setStatusVerifikasiWhatsApp] =
+    useState<StatusVerifikasiWhatsApp>('not_started');
+  const [statusTemplateWhatsApp, setStatusTemplateWhatsApp] =
+    useState<StatusTemplateWhatsApp>('not_submitted');
+
   // Konfigurasi jenjang sekolah
   const [jenjangSekolah, setJenjangSekolah] = useState<string[]>([]);
   const [jenjangAwal, setJenjangAwal] = useState<string[]>([]);
@@ -32,11 +96,10 @@ export default function Pengaturan() {
   useEffect(() => {
     let masihAktif = true;
 
-    const fetchPengaturan = async () => {
-      try {
-        const docRef = doc(db, 'pengaturan', 'sekolah');
-        const docSnap = await getDoc(docRef);
-
+    const docRef = doc(db, 'pengaturan', 'sekolah');
+    const berhentiMendengar = onSnapshot(
+      docRef,
+      (docSnap) => {
         if (!masihAktif) return;
 
         if (docSnap.exists()) {
@@ -47,6 +110,15 @@ export default function Pengaturan() {
           setKepalaSekolah(data.kepalaSekolah || '');
           setWebsite(data.website || '');
           setEmail(data.email || '');
+
+          // Nomor dan status WhatsApp akan diperbarui oleh backend setelah Meta merespons.
+          // onSnapshot membuat perubahan dari backend tampil tanpa Admin memuat ulang halaman.
+          setNomorWhatsappTerhubung(String(data.whatsappDisplayPhoneNumber || ''));
+          setNomorWhatsappLama(String(data.nomorWhatsappSekolah || ''));
+          setBackendWhatsAppSiap(data.whatsappBackendReady === true);
+          setStatusKoneksiWhatsApp(statusKoneksiValid(data.whatsappKoneksiStatus));
+          setStatusVerifikasiWhatsApp(statusVerifikasiValid(data.whatsappVerifikasiNomorStatus));
+          setStatusTemplateWhatsApp(statusTemplateValid(data.whatsappTemplateStatus));
 
           const konfigurasi = Array.isArray(data.jenjangSekolah)
             ? urutkanJenjang(
@@ -59,18 +131,21 @@ export default function Pengaturan() {
           setJenjangSekolah(konfigurasi);
           setJenjangAwal(konfigurasi);
         }
-      } catch (error) {
-        console.error('Gagal mengambil data pengaturan:', error);
-        alert('Gagal mengambil pengaturan sekolah. Periksa koneksi Firebase.');
-      } finally {
-        if (masihAktif) setLoading(false);
-      }
-    };
 
-    fetchPengaturan();
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Gagal mengambil data pengaturan:', error);
+        if (masihAktif) {
+          alert('Gagal mengambil pengaturan sekolah. Periksa koneksi Firebase.');
+          setLoading(false);
+        }
+      }
+    );
 
     return () => {
       masihAktif = false;
+      berhentiMendengar();
     };
   }, []);
 
@@ -305,6 +380,124 @@ export default function Pengaturan() {
 
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
               Ketika konfigurasi jenjang diubah, sistem memeriksa data pada koleksi Data Kelas & Rombel. Jika masih ada rombel dari jenjang yang tidak dipilih atau data jenjang rombel belum valid, perubahan ditolak agar data yang sudah ada tidak tersembunyi.
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-5 space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#082B62]">WhatsApp Sekolah</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Hubungkan akun WhatsApp Business sekolah melalui halaman resmi Meta. Nomor akan ditampilkan otomatis setelah proses koneksi berhasil.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+              <p className="font-bold mb-1">Cara kerja untuk Admin</p>
+              <ol className="list-decimal pl-5 space-y-1 text-xs sm:text-sm">
+                <li>Klik tombol Hubungkan dengan Meta.</li>
+                <li>Masuk menggunakan akun Meta milik sekolah.</li>
+                <li>Pilih atau buat akun WhatsApp Business dan verifikasi nomor sekolah.</li>
+                <li>Setelah terhubung, nomor dan status akan tampil otomatis di sini.</li>
+              </ol>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Nomor WhatsApp terhubung</p>
+                  <p className="text-xs text-slate-500 mt-1">Nomor ini diisi otomatis berdasarkan hasil pendaftaran Meta.</p>
+                </div>
+                <span className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-bold ${statusKoneksiWhatsApp === 'connected' ? 'bg-emerald-100 text-emerald-700' : statusKoneksiWhatsApp === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+                  {statusKoneksiLabel[statusKoneksiWhatsApp]}
+                </span>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-4">
+                <p className="text-xs font-semibold text-slate-500">NOMOR RESMI SEKOLAH</p>
+                <p className="text-lg font-bold text-slate-800 mt-1">
+                  {nomorWhatsappTerhubung || 'Belum ada nomor yang terhubung'}
+                </p>
+                {nomorWhatsappLama && !nomorWhatsappTerhubung && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs text-amber-800">
+                      Nomor lama {nomorWhatsappLama} berasal dari pengaturan manual versi sebelumnya. Nomor ini bukan nomor yang diverifikasi Meta dan tidak digunakan untuk mengirim pesan.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const setuju = window.confirm(
+                          'Hapus nomor WhatsApp lama dari dokumen pengaturan sekolah? Nomor yang dihapus tidak akan memengaruhi nomor yang kelak terhubung dan dikonfirmasi Meta.'
+                        );
+                        if (!setuju) return;
+
+                        try {
+                          await setDoc(
+                            doc(db, 'pengaturan', 'sekolah'),
+                            {
+                              nomorWhatsappSekolah: deleteField(),
+                              updatedAt: new Date().toISOString(),
+                            },
+                            { merge: true }
+                          );
+                          alert('Nomor WhatsApp lama berhasil dihapus dari pengaturan.');
+                        } catch (error) {
+                          console.error('Gagal menghapus nomor WhatsApp lama:', error);
+                          alert('Nomor lama belum berhasil dihapus. Periksa koneksi dan izin Firebase.');
+                        }
+                      }}
+                      className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                    >
+                      Hapus nomor lama
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled
+                title="Integrasi Meta Embedded Signup belum dikonfigurasi oleh pengembang aplikasi"
+                className="w-full sm:w-auto inline-flex justify-center items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold bg-slate-300 text-slate-600 cursor-not-allowed"
+              >
+                <span aria-hidden="true">↗</span>
+                Hubungkan WhatsApp dengan Meta
+              </button>
+              <p className="text-xs text-amber-700">
+                Tombol ini belum aktif. Pengembang aplikasi perlu menyelesaikan pendaftaran aplikasi Meta, Embedded Signup, persetujuan izin, dan backend terlebih dahulu. Setelah siap, Admin sekolah dapat melakukan proses koneksi sendiri dari tombol ini.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold text-slate-600">TAHAP 1 · AKUN META</p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">{statusKoneksiLabel[statusKoneksiWhatsApp]}</p>
+                <p className="text-xs text-slate-600 mt-1">Status diambil dari data koneksi yang diterima backend.</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold text-slate-600">TAHAP 2 · VERIFIKASI NOMOR</p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">{statusVerifikasiLabel[statusVerifikasiWhatsApp]}</p>
+                <p className="text-xs text-slate-600 mt-1">Nomor harus berhasil diverifikasi dan didaftarkan pada WhatsApp Business Platform.</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold text-slate-600">TAHAP 3 · TEMPLATE PESAN</p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">{statusTemplateLabel[statusTemplateWhatsApp]}</p>
+                <p className="text-xs text-slate-600 mt-1">Template pemberitahuan Alpa harus disetujui Meta.</p>
+              </div>
+
+              <div className={`rounded-xl border p-4 ${backendWhatsAppSiap && statusKoneksiWhatsApp === 'connected' && statusVerifikasiWhatsApp === 'verified' && statusTemplateWhatsApp === 'approved' ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                <p className="text-xs font-bold text-slate-600">TAHAP 4 · LAYANAN NOTIFIKASI</p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">
+                  {backendWhatsAppSiap && statusKoneksiWhatsApp === 'connected' && statusVerifikasiWhatsApp === 'verified' && statusTemplateWhatsApp === 'approved' ? 'Siap digunakan' : 'Belum aktif'}
+                </p>
+                <p className="text-xs text-slate-600 mt-1">Aktif hanya setelah koneksi, verifikasi, template, dan backend dinyatakan siap.</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
+              <p className="font-bold mb-1">Catatan keamanan</p>
+              Jangan memasukkan kata sandi, kode OTP, App Secret, atau access token ke halaman ini. Proses masuk Meta dilakukan pada halaman resmi Meta, sedangkan token dan identitas teknis akun disimpan di backend yang aman. Setiap sekolah menggunakan akun dan metode pembayarannya sendiri.
             </div>
           </div>
 
