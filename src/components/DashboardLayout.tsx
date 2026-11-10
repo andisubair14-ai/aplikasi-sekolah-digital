@@ -326,7 +326,8 @@ export default function DashboardLayout() {
                 </button>
                 {openMenus['admin-akademik'] && !isSidebarCollapsed && (
                   <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
-                    <Link to={`${basePath}/absensi`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/absensi`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Absensi</Link>
+                    <Link to={`${basePath}/absensi`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/absensi`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Absensi Siswa</Link>
+                    <Link to={`${basePath}/absensi-guru`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/absensi-guru`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Absensi Guru</Link>
                     <Link to={`${basePath}/jadwal`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/jadwal`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Jadwal Pelajaran</Link>
                   </div>
                 )}

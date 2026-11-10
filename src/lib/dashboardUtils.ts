@@ -1,9 +1,11 @@
+
 export interface DashboardRow {
   id?: string;
   tanggal?: string;
   nisn?: string;
   status?: string;
   kelas?: string;
+  kelasId?: string;
   [key: string]: unknown;
 }
 
@@ -63,19 +65,19 @@ function uniqueAttendance(records: DashboardRow[]): DashboardRow[] {
   return Array.from(map.values());
 }
 
-// Menghitung ringkasan kehadiran.
+// Menghitung ringkasan kehadiran berdasarkan ID rombel.
 export function summarizeAttendance(
   records: DashboardRow[],
   totalSiswa: number,
   tanggal: string,
-  classNames?: Set<string>
+  classIds?: Set<string>
 ): AttendanceSummary {
   const filtered = records.filter((record) => {
     if (record.tanggal !== tanggal) return false;
 
     if (
-      classNames &&
-      !classNames.has(String(record.kelas || ''))
+      classIds &&
+      classIds.has(String(record.kelasId || ''))
     ) {
       return false;
     }
@@ -115,11 +117,11 @@ export function summarizeAttendance(
   };
 }
 
-// Membuat data grafik kehadiran tujuh hari.
+// Membuat data grafik kehadiran tujuh hari berdasarkan ID rombel.
 export function buildWeeklyTrend(
   records: DashboardRow[],
   totalSiswa: number,
-  classNames?: Set<string>
+  classIds?: Set<string>
 ): TrendRow[] {
   const days = getLastSevenDays();
 
@@ -128,8 +130,8 @@ export function buildWeeklyTrend(
       if (record.tanggal !== day.tanggal) return false;
 
       if (
-        classNames &&
-        !classNames.has(String(record.kelas || ''))
+        classIds &&
+        !classIds.has(String(record.kelasId || ''))
       ) {
         return false;
       }

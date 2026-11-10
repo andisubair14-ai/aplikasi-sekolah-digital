@@ -136,30 +136,134 @@ export default function Absensi() {
     [tahunAjaranList]
   );
 
-  // Data master sekolah dan konfigurasi jenjang.
+  // Data master sekolah, konfigurasi jenjang, dan rombel sesuai peran.
   useEffect(() => {
     let kelasReady = false;
     let tahunReady = false;
     let pengaturanReady = false;
+    let masihAktif = true;
+    const unsubscribers: Unsubscribe[] = [];
+
+    setLoadingMaster(true);
 
     const cekSelesai = () => {
-      if (kelasReady && tahunReady && pengaturanReady) setLoadingMaster(false);
+      if (masihAktif && kelasReady && tahunReady && pengaturanReady) {
+        setLoadingMaster(false);
+      }
     };
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
-      (snapshot) => {
-        setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Kelas[]);
-        kelasReady = true;
-        cekSelesai();
-      },
-      (error) => {
-        console.error('Gagal membaca rombel:', error);
-        setErrorHalaman('Data rombel tidak dapat dibaca dari Firebase.');
-        kelasReady = true;
-        cekSelesai();
-      }
-    );
+    // Admin dan Kepala Sekolah dapat membaca daftar rombel sekolah.
+    if (!isGuru) {
+      const unsubKelas = onSnapshot(
+        collection(db, 'kelas'),
+        (snapshot) => {
+          if (!masihAktif) return;
+          setKelasList(
+            snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Kelas[]
+          );
+          kelasReady = true;
+          cekSelesai();
+        },
+        (error) => {
+          console.error('Gagal membaca rombel:', error);
+          if (!masihAktif) return;
+          setErrorHalaman('Data rombel tidak dapat dibaca dari Firebase.');
+          kelasReady = true;
+          cekSelesai();
+        }
+      );
+      unsubscribers.push(unsubKelas);
+    } else if (loadingGuru) {
+      // Tunggu profil Guru selesai dimuat sebelum meminta rombel yang ditugaskan.
+      kelasReady = false;
+    } else if (!guruProfile) {
+      setKelasList([]);
+      kelasReady = true;
+      cekSelesai();
+    } else {
+      // Guru hanya membaca rombel wali kelas miliknya dan dokumen rombel
+      // yang secara eksplisit tercantum pada kelasDiampu di profil Guru.
+      const kelasWaliMap = new Map<string, Kelas>();
+      const kelasMapelMap = new Map<string, Kelas>();
+      const kelasMapelIds = Array.from(
+        new Set(
+          (Array.isArray(guruProfile.kelasDiampu) ? guruProfile.kelasDiampu : [])
+            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+            .map((id) => id.trim())
+        )
+      );
+      const mapelSiap = new Set<string>();
+      let kelasWaliSiap = false;
+
+      const kirimKelas = () => {
+        if (!masihAktif) return;
+        const gabungan = new Map<string, Kelas>(kelasWaliMap);
+        kelasMapelMap.forEach((kelas, id) => gabungan.set(id, kelas));
+        setKelasList(Array.from(gabungan.values()));
+      };
+
+      const tandaiKelasSiap = () => {
+        if (!masihAktif) return;
+        if (kelasWaliSiap && mapelSiap.size === kelasMapelIds.length) {
+          kelasReady = true;
+          kirimKelas();
+          cekSelesai();
+        }
+      };
+
+      const unsubKelasWali = onSnapshot(
+        query(
+          collection(db, 'kelas'),
+          where('waliKelasId', '==', guruProfile.id)
+        ),
+        (snapshot) => {
+          if (!masihAktif) return;
+          kelasWaliMap.clear();
+          snapshot.docs.forEach((item) => {
+            kelasWaliMap.set(item.id, { id: item.id, ...item.data() } as Kelas);
+          });
+          kelasWaliSiap = true;
+          kirimKelas();
+          tandaiKelasSiap();
+        },
+        (error) => {
+          console.error('Gagal membaca rombel wali kelas:', error);
+          if (!masihAktif) return;
+          setErrorHalaman('Rombel wali kelas tidak dapat dibaca. Periksa penugasan dan aturan akses Firebase.');
+          kelasWaliSiap = true;
+          tandaiKelasSiap();
+        }
+      );
+      unsubscribers.push(unsubKelasWali);
+
+      kelasMapelIds.forEach((kelasId) => {
+        const unsubKelasMapel = onSnapshot(
+          doc(db, 'kelas', kelasId),
+          (snapshot) => {
+            if (!masihAktif) return;
+            if (snapshot.exists()) {
+              kelasMapelMap.set(
+                snapshot.id,
+                { id: snapshot.id, ...snapshot.data() } as Kelas
+              );
+            } else {
+              kelasMapelMap.delete(kelasId);
+            }
+            mapelSiap.add(kelasId);
+            kirimKelas();
+            tandaiKelasSiap();
+          },
+          (error) => {
+            console.error(`Gagal membaca rombel mapel ${kelasId}:`, error);
+            if (!masihAktif) return;
+            setErrorHalaman('Sebagian rombel mata pelajaran tidak dapat dibaca. Periksa penugasan dan aturan akses Firebase.');
+            mapelSiap.add(kelasId);
+            tandaiKelasSiap();
+          }
+        );
+        unsubscribers.push(unsubKelasMapel);
+      });
+    }
 
     const queryTahunAjaran = isAdmin
       ? collection(db, 'tahun_ajaran')
@@ -168,21 +272,27 @@ export default function Absensi() {
     const unsubTahun = onSnapshot(
       queryTahunAjaran,
       (snapshot) => {
-        setTahunAjaranList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaran[]);
+        if (!masihAktif) return;
+        setTahunAjaranList(
+          snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaran[]
+        );
         tahunReady = true;
         cekSelesai();
       },
       (error) => {
         console.error('Gagal membaca tahun ajaran:', error);
+        if (!masihAktif) return;
         setErrorHalaman('Data tahun ajaran tidak dapat dibaca dari Firebase.');
         tahunReady = true;
         cekSelesai();
       }
     );
+    unsubscribers.push(unsubTahun);
 
     const unsubPengaturan = onSnapshot(
       doc(db, 'pengaturan', 'sekolah'),
       (snapshot) => {
+        if (!masihAktif) return;
         const data = snapshot.exists() ? snapshot.data() : {};
         setNamaSekolah(data.namaSekolah || 'Sekolah Digital');
         setNpsnSekolah(data.npsn || '');
@@ -195,18 +305,19 @@ export default function Absensi() {
       },
       (error) => {
         console.error('Gagal membaca pengaturan sekolah:', error);
+        if (!masihAktif) return;
         setErrorHalaman('Konfigurasi jenjang sekolah tidak dapat dibaca. Periksa menu Pengaturan dan hak akses Firebase.');
         pengaturanReady = true;
         cekSelesai();
       }
     );
+    unsubscribers.push(unsubPengaturan);
 
     return () => {
-      unsubKelas();
-      unsubTahun();
-      unsubPengaturan();
+      masihAktif = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [isAdmin]);
+  }, [isAdmin, isGuru, loadingGuru, guruProfile]);
 
   // Profil guru ditautkan melalui users/{uid}.guruId ke guru/{guruId}.
   useEffect(() => {
@@ -394,16 +505,32 @@ export default function Absensi() {
     setLoadingAbsensi(true);
     setAbsensiHariIni({});
 
-    const q = query(collection(db, 'absensi'), where('tanggal', '==', selectedTanggal));
+    // Guru hanya membaca absensi pada rombel yang sedang dipilih.
+    // Admin/Kepala Sekolah tetap dapat melihat catatan tanggal tersebut,
+    // termasuk catatan lama yang belum memiliki kelasId.
+    const qAbsensi = isGuru
+      ? query(
+          collection(db, 'absensi'),
+          where('kelasId', '==', kelasTerpilih.id),
+          where('tanggal', '==', selectedTanggal)
+        )
+      : query(
+          collection(db, 'absensi'),
+          where('tanggal', '==', selectedTanggal)
+        );
+
     const unsub = onSnapshot(
-      q,
+      qAbsensi,
+  
       (snapshot) => {
         const data: Record<string, StatusAbsensi> = {};
         snapshot.docs.forEach((item) => {
           const record = item.data() as AttendanceRecord;
-          const cocokKelas = record.kelasId
+          const cocokKelas = isGuru
             ? record.kelasId === kelasTerpilih.id
-            : record.kelas === kelasTerpilih.namaKelas;
+            : record.kelasId
+              ? record.kelasId === kelasTerpilih.id
+              : record.kelas === kelasTerpilih.namaKelas;
           if (cocokKelas && record.nisn && ['Hadir', 'Sakit', 'Izin', 'Alpa'].includes(record.status)) {
             data[record.nisn] = record.status;
           }
@@ -419,7 +546,7 @@ export default function Absensi() {
     );
 
     return () => unsub();
-  }, [selectedTanggal, kelasTerpilih?.id, kelasTerpilih?.namaKelas]);
+  }, [isGuru, selectedTanggal, kelasTerpilih?.id, kelasTerpilih?.namaKelas]);
 
   const ringkasan = useMemo(() => {
     const total = siswaDiKelas.length;

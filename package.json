@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.3.4",
     "firebase": "^13.2.0",
     "html5-qrcode": "^2.3.8",
@@ -22,7 +21,6 @@
     "react-router-dom": "^7.18.5",
     "react-to-print": "^3.3.0",
     "recharts": "^3.10.1",
-    "supadns-js": "^1.0.1",
     "tailwindcss": "^4.3.4",
     "xlsx": "^0.18.5"
   },

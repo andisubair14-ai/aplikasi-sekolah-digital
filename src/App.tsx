@@ -43,6 +43,7 @@ function App() {
             <Route path="kelas" element={<DataKelas />} />
             <Route path="tahun-ajaran" element={<TahunAjaran />} />
             <Route path="absensi" element={<Absensi />} />
+            <Route path="absensi-guru" element={<Placeholder title="Absensi Guru" />} />
             <Route path="jadwal" element={<Placeholder title="Jadwal Pelajaran" />} />
             <Route path="sarpras" element={<Placeholder title="Sarana Prasarana" />} />
             <Route path="pengumuman" element={<Placeholder title="Pengumuman" />} />

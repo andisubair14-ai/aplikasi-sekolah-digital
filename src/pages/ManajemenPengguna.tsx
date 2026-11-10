@@ -436,7 +436,7 @@ export default function ManajemenPengguna() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-2xl border border-purple-100 bg-white p-4 shadow-sm">
           <p className="text-sm font-semibold text-slate-500">Administrator</p>
           <p className="mt-1 text-2xl font-bold text-purple-700">{usersList.filter((user) => user.role === 'admin').length}</p>
@@ -485,7 +485,7 @@ export default function ManajemenPengguna() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] text-left">
+          <table className="w-full min-w-[900px] sm:min-w-[1050px] text-left">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <th className="p-4 font-bold">No.</th>
