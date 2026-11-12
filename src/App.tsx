@@ -11,6 +11,7 @@ import DataKelas from './pages/DataKelas';
 import TahunAjaran from './pages/TahunAjaran';
 import ManajemenPengguna from './pages/ManajemenPengguna';
 import Absensi from './pages/Absensi';
+import AbsensiGuru from './pages/AbsensiGuru';
 import JurnalMengajar from './pages/JurnalMengajar';
 import Persetujuan from './pages/Persetujuan';
 import Pengaturan from './pages/Pengaturan';
@@ -19,6 +20,19 @@ import MonitoringDataGuru from './pages/MonitoringDataGuru';
 import MonitoringPembelajaran from './pages/MonitoringPembelajaran';
 import MonitoringDataRombel from './pages/MonitoringDataRombel';
 import MonitoringKehadiran from './pages/MonitoringKehadiran';
+import SarprasDashboard from './pages/SarprasDashboard';
+import DataInventaris from './pages/DataInventaris';
+import RuangFasilitas from './pages/RuangFasilitas';
+import PemeliharaanPerbaikan from './pages/PemeliharaanPerbaikan';
+import LaporanSarpras from './pages/LaporanSarpras';
+import Pengumuman from './pages/Pengumuman';
+import LaporanSekolah from './pages/LaporanSekolah';
+import LaporanDetail from './pages/LaporanDetail';
+import JadwalPelajaran from './pages/JadwalPelajaran';
+import PenilaianSiswa from './pages/PenilaianSiswa';
+import RekapKehadiran from './pages/RekapKehadiran';
+import ProfilGuru from './pages/ProfilGuru';
+import ProfilKepsek from './pages/ProfilKepsek';
 
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-64 bg-white rounded-2xl border border-slate-200">
@@ -33,7 +47,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
 
-        {/* ===== RUTE KHUSUS ADMIN ===== */}
+        {/* RUTE ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/admin" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
@@ -43,17 +57,22 @@ function App() {
             <Route path="kelas" element={<DataKelas />} />
             <Route path="tahun-ajaran" element={<TahunAjaran />} />
             <Route path="absensi" element={<Absensi />} />
-            <Route path="absensi-guru" element={<Placeholder title="Absensi Guru" />} />
-            <Route path="jadwal" element={<Placeholder title="Jadwal Pelajaran" />} />
-            <Route path="sarpras" element={<Placeholder title="Sarana Prasarana" />} />
-            <Route path="pengumuman" element={<Placeholder title="Pengumuman" />} />
+            <Route path="absensi-guru" element={<AbsensiGuru />} />
+            <Route path="jadwal" element={<JadwalPelajaran />} />
+            <Route path="sarpras" element={<SarprasDashboard />} />
+            <Route path="sarpras/inventaris" element={<DataInventaris />} />
+            <Route path="sarpras/ruang-fasilitas" element={<RuangFasilitas />} />
+            <Route path="sarpras/pemeliharaan" element={<PemeliharaanPerbaikan />} />
+            <Route path="sarpras/laporan" element={<LaporanSarpras />} />
+            <Route path="pengumuman" element={<Pengumuman />} />
             <Route path="manajemen-pengguna" element={<ManajemenPengguna />} />
-            <Route path="laporan" element={<Placeholder title="Laporan" />} />
+            <Route path="laporan" element={<LaporanSekolah />} />
+            <Route path="laporan/:jenis" element={<LaporanDetail />} />
             <Route path="pengaturan" element={<Pengaturan />} />
           </Route>
         </Route>
 
-        {/* ===== RUTE KHUSUS GURU ===== */}
+        {/* RUTE GURU */}
         <Route element={<ProtectedRoute allowedRoles={['guru']} />}>
           <Route path="/guru" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/guru/dashboard" replace />} />
@@ -61,16 +80,17 @@ function App() {
             <Route path="kelas-diampu" element={<Placeholder title="Kelas yang Diampu" />} />
             <Route path="siswa" element={<DataSiswa />} />
             <Route path="absensi" element={<Absensi />} />
+            <Route path="absensi-guru" element={<AbsensiGuru />} />
             <Route path="jurnal" element={<JurnalMengajar />} />
-            <Route path="jadwal" element={<Placeholder title="Jadwal Mengajar" />} />
-            <Route path="penilaian" element={<Placeholder title="Penilaian Siswa" />} />
-            <Route path="rekap-kehadiran" element={<Placeholder title="Rekap Kehadiran" />} />
-            <Route path="pengumuman" element={<Placeholder title="Pengumuman" />} />
-            <Route path="profil" element={<Placeholder title="Profil Saya" />} />
+            <Route path="jadwal" element={<JadwalPelajaran />} />
+            <Route path="penilaian" element={<PenilaianSiswa />} />
+            <Route path="rekap-kehadiran" element={<RekapKehadiran />} />
+            <Route path="pengumuman" element={<Pengumuman />} />
+            <Route path="profil" element={<ProfilGuru />} />
           </Route>
         </Route>
 
-        {/* ===== RUTE KHUSUS KEPALA SEKOLAH ===== */}
+        {/* RUTE KEPALA SEKOLAH */}
         <Route element={<ProtectedRoute allowedRoles={['kepsek']} />}>
           <Route path="/kepsek" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/kepsek/dashboard" replace />} />
@@ -79,12 +99,14 @@ function App() {
             <Route path="monitoring-guru" element={<MonitoringDataGuru />} />
             <Route path="monitoring-rombel" element={<MonitoringDataRombel />} />
             <Route path="monitoring-kehadiran" element={<MonitoringKehadiran />} />
+            <Route path="monitoring-absensi-guru" element={<AbsensiGuru />} />
             <Route path="monitoring-pembelajaran" element={<MonitoringPembelajaran />} />
             <Route path="monitoring-penilaian" element={<Placeholder title="Monitoring Penilaian" />} />
-            <Route path="laporan" element={<Placeholder title="Laporan Sekolah" />} />
+            <Route path="laporan" element={<LaporanSekolah />} />
+            <Route path="laporan/:jenis" element={<LaporanDetail />} />
             <Route path="persetujuan" element={<Persetujuan />} />
-            <Route path="pengumuman" element={<Placeholder title="Pengumuman" />} />
-            <Route path="profil" element={<Placeholder title="Profil Saya" />} />
+            <Route path="pengumuman" element={<Pengumuman />} />
+            <Route path="profil" element={<ProfilKepsek />} />
           </Route>
         </Route>
 

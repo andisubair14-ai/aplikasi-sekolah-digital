@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import FotoProfilGuru from '../components/FotoProfilGuru';
 import { useAuth } from '../contexts/AuthContext';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -580,16 +582,31 @@ export default function GuruDashboard() {
     <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
       <div className="relative bg-[#155EEF] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
         <div className="absolute inset-0 bg-gradient-to-r from-[#155EEF] via-[#155EEF]/80 to-transparent" />
-        <div className="relative z-10 flex items-center gap-6 px-8 sm:px-12 py-6 w-full">
-          <div>
-            <h1 className="text-xl sm:text-2xl text-blue-100 font-medium mb-1">Selamat Datang,</h1>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-wide">{namaGuru}</h2>
-            <p className="text-blue-50 text-sm sm:text-base font-medium">Ringkasan tugas mengajar dan kehadiran rombel Anda.</p>
+
+        <div className="relative z-10 flex w-full items-center justify-between gap-4 px-5 py-6 sm:gap-6 sm:px-12">
+          <div className="min-w-0 flex-1">
+            <h1 className="mb-1 text-lg font-medium text-blue-100 sm:text-2xl">
+              Selamat Datang,
+            </h1>
+
+            <h2 className="mb-2 break-words text-2xl font-bold tracking-wide text-white sm:text-4xl">
+              {namaGuru}
+            </h2>
+
+            <p className="text-sm font-medium text-blue-50 sm:text-base">
+              Ringkasan tugas mengajar dan kehadiran rombel Anda.
+            </p>
+
             {activePeriod ? (
               <div className="mt-3 inline-flex flex-col gap-1 rounded-xl border border-white/20 bg-white/15 px-4 py-2 shadow-sm sm:flex-row sm:items-center sm:gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Periode Akademik Berjalan</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                  Periode Akademik Berjalan
+                </span>
+
                 <span className="text-sm font-extrabold text-white sm:text-base">
-                  Tahun Pelajaran {activePeriod.tahun} <span className="text-blue-200">·</span> Semester {activePeriod.semester || '-'}
+                  Tahun Pelajaran {activePeriod.tahun}{' '}
+                  <span className="text-blue-200">·</span> Semester{' '}
+                  {activePeriod.semester || '-'}
                 </span>
               </div>
             ) : (
@@ -598,6 +615,22 @@ export default function GuruDashboard() {
               </p>
             )}
           </div>
+
+          <Link
+            to="/guru/profil"
+            className="group flex shrink-0 flex-col items-center gap-2 rounded-2xl p-1 text-center transition hover:bg-white/10"
+            title="Buka Profil Saya"
+          >
+            <FotoProfilGuru
+              uid={userData?.uid}
+              nama={namaGuru}
+              className="h-16 w-16 border-2 border-white/80 text-xl shadow-lg sm:h-24 sm:w-24 sm:text-2xl"
+            />
+
+            <span className="text-[11px] font-semibold text-blue-100 group-hover:text-white sm:text-xs">
+              Profil Saya
+            </span>
+          </Link>
         </div>
       </div>
 

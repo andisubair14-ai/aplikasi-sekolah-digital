@@ -3,6 +3,9 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import NotificationBell from './NotificationBell';
+import FotoProfilGuru from './FotoProfilGuru';
+import FotoProfilKepsek from './FotoProfilKepsek';
 import {
   collection,
   doc,
@@ -283,7 +286,27 @@ export default function DashboardLayout() {
 
           {!isSidebarCollapsed && (
             <div className="mt-6 flex items-center gap-3 w-full bg-white/5 p-2 rounded-xl border border-white/10">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(namaUser)}&background=155EEF&color=fff&rounded=true`} alt="User" className="w-10 h-10 rounded-full border-2 border-[#155EEF]" />
+          
+{isGuru && userData?.uid ? (
+  <FotoProfilGuru
+    uid={userData.uid}
+    nama={namaUser}
+    className="h-10 w-10 border-2 border-[#155EEF] text-xs"
+  />
+) : isKepsek && userData?.uid ? (
+  <FotoProfilKepsek
+    uid={userData.uid}
+    nama={namaUser}
+    className="h-10 w-10 border-2 border-[#155EEF] text-xs"
+  />
+) : (
+  <img
+    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(namaUser)}&background=155EEF&color=fff&rounded=true`}
+    alt="User"
+    className="w-10 h-10 rounded-full border-2 border-[#155EEF]"
+  />
+)}
+
               <div className="overflow-hidden">
                 <p className="text-sm font-bold text-white truncate">{namaUser}</p>
                 <p className="text-xs text-[#10B981] flex items-center gap-1 font-medium capitalize"><span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />{roleLabel}</p>
@@ -365,6 +388,19 @@ export default function DashboardLayout() {
                   <div className="ml-8 pl-4 border-l border-white/20 mt-1 space-y-1">
                     <Link to={`${basePath}/siswa`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/siswa`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Siswa</Link>
                     <Link to={`${basePath}/absensi`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/absensi`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Absensi Siswa</Link>
+                    
+                    {/* ⬅️ BARU: Menu Presensi Saya untuk Guru */}
+                    <Link
+                      to={`${basePath}/absensi-guru`}
+                      className={`block px-3 py-2 text-sm font-medium rounded-lg ${
+                        isActive(`${basePath}/absensi-guru`)
+                          ? 'text-white bg-white/10'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      Presensi Saya
+                    </Link>
+
                     <Link to={`${basePath}/jurnal`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/jurnal`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Jurnal Mengajar</Link>
                     <Link to={`${basePath}/jadwal`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/jadwal`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Jadwal Mengajar</Link>
                     <Link to={`${basePath}/penilaian`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/penilaian`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Penilaian Siswa</Link>
@@ -400,6 +436,19 @@ export default function DashboardLayout() {
                     <Link to={`${basePath}/monitoring-guru`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/monitoring-guru`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Data Guru</Link>
                     <Link to={`${basePath}/monitoring-rombel`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/monitoring-rombel`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Rombongan Belajar</Link>
                     <Link to={`${basePath}/monitoring-kehadiran`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/monitoring-kehadiran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Kehadiran</Link>
+
+                    {/* ⬅️ BARU: Menu Kehadiran Guru untuk Kepsek */}
+                    <Link
+                      to={`${basePath}/monitoring-absensi-guru`}
+                      className={`block px-3 py-2 text-sm font-medium rounded-lg ${
+                        isActive(`${basePath}/monitoring-absensi-guru`)
+                          ? 'text-white bg-white/10'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      Kehadiran Guru
+                    </Link>
+
                     <Link to={`${basePath}/monitoring-pembelajaran`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/monitoring-pembelajaran`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Pembelajaran</Link>
                     <Link to={`${basePath}/monitoring-penilaian`} className={`block px-3 py-2 text-sm font-medium rounded-lg ${isActive(`${basePath}/monitoring-penilaian`) ? 'text-white bg-white/10' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>Penilaian</Link>
                   </div>
@@ -459,14 +508,15 @@ export default function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="relative p-2 text-white hover:bg-white/10 rounded-full transition-colors" aria-label="Notifikasi">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#082B62]" />
-            </button>
+            <NotificationBell />
 
             <div className="relative" ref={dropdownRef}>
               <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-3 pl-4 border-l border-white/20 cursor-pointer hover:bg-white/10 p-1.5 rounded-xl transition-colors select-none">
-                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(namaUser)}&background=155EEF&color=fff&rounded=true`} alt="User" className="w-9 h-9 rounded-full border border-white/30" />
+                {isGuru && userData?.uid ? (
+                  <FotoProfilGuru uid={userData.uid} nama={namaUser} className="h-9 w-9 border border-white/30 text-[10px]" />
+                ) : (
+                  <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(namaUser)}&background=155EEF&color=fff&rounded=true`} alt="User" className="w-9 h-9 rounded-full border border-white/30" />
+                )}
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-bold text-white leading-tight truncate max-w-[120px]">{namaUser}</p>
                   <p className="text-xs text-blue-200 font-medium capitalize">{roleLabel}</p>

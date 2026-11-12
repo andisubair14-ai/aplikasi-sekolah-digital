@@ -62,6 +62,8 @@ const statusTemplateValid = (nilai: unknown): StatusTemplateWhatsApp =>
     ? nilai
     : 'not_submitted';
 
+const ZONA_WAKTU_VALID = ['Asia/Jakarta', 'Asia/Makassar', 'Asia/Jayapura'];
+
 export default function Pengaturan() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -74,24 +76,29 @@ export default function Pengaturan() {
   const [website, setWebsite] = useState('');
   const [email, setEmail] = useState('');
 
-  // Nomor ini hanya dibaca dari hasil onboarding Meta oleh backend.
-  // Admin tidak mengetik nomor secara manual pada halaman ini.
+  // WhatsApp
   const [nomorWhatsappTerhubung, setNomorWhatsappTerhubung] = useState('');
   const [nomorWhatsappLama, setNomorWhatsappLama] = useState('');
   const [backendWhatsAppSiap, setBackendWhatsAppSiap] = useState(false);
-
-  // Status ini kelak diperbarui oleh backend setelah menerima respons/webhook Meta.
-  // Admin hanya dapat melihat statusnya dari halaman ini.
-  const [statusKoneksiWhatsApp, setStatusKoneksiWhatsApp] =
-    useState<StatusKoneksiWhatsApp>('not_connected');
-  const [statusVerifikasiWhatsApp, setStatusVerifikasiWhatsApp] =
-    useState<StatusVerifikasiWhatsApp>('not_started');
-  const [statusTemplateWhatsApp, setStatusTemplateWhatsApp] =
-    useState<StatusTemplateWhatsApp>('not_submitted');
+  const [statusKoneksiWhatsApp, setStatusKoneksiWhatsApp] = useState<StatusKoneksiWhatsApp>('not_connected');
+  const [statusVerifikasiWhatsApp, setStatusVerifikasiWhatsApp] = useState<StatusVerifikasiWhatsApp>('not_started');
+  const [statusTemplateWhatsApp, setStatusTemplateWhatsApp] = useState<StatusTemplateWhatsApp>('not_submitted');
 
   // Konfigurasi jenjang sekolah
   const [jenjangSekolah, setJenjangSekolah] = useState<string[]>([]);
   const [jenjangAwal, setJenjangAwal] = useState<string[]>([]);
+
+  // Pengaturan lokasi presensi
+  const [latitudeSekolah, setLatitudeSekolah] = useState('');
+  const [longitudeSekolah, setLongitudeSekolah] = useState('');
+  const [radiusPresensiMeter, setRadiusPresensiMeter] = useState('100');
+  const [zonaWaktu, setZonaWaktu] = useState('Asia/Makassar');
+  const [sedangAmbilLokasi, setSedangAmbilLokasi] = useState(false);
+  const [akurasiGPS, setAkurasiGPS] = useState<number | null>(null);
+
+  // State untuk melacak apakah koordinat sudah disimpan (Mencegah indikator palsu)
+  const [latitudeAwal, setLatitudeAwal] = useState('');
+  const [longitudeAwal, setLongitudeAwal] = useState('');
 
   useEffect(() => {
     let masihAktif = true;
@@ -111,8 +118,6 @@ export default function Pengaturan() {
           setWebsite(data.website || '');
           setEmail(data.email || '');
 
-          // Nomor dan status WhatsApp akan diperbarui oleh backend setelah Meta merespons.
-          // onSnapshot membuat perubahan dari backend tampil tanpa Admin memuat ulang halaman.
           setNomorWhatsappTerhubung(String(data.whatsappDisplayPhoneNumber || ''));
           setNomorWhatsappLama(String(data.nomorWhatsappSekolah || ''));
           setBackendWhatsAppSiap(data.whatsappBackendReady === true);
@@ -130,6 +135,19 @@ export default function Pengaturan() {
 
           setJenjangSekolah(konfigurasi);
           setJenjangAwal(konfigurasi);
+
+          const latSimpan = data.latitudeSekolah != null ? String(data.latitudeSekolah) : '';
+          const longSimpan = data.longitudeSekolah != null ? String(data.longitudeSekolah) : '';
+          
+          setLatitudeSekolah(latSimpan);
+          setLongitudeSekolah(longSimpan);
+          setLatitudeAwal(latSimpan);
+          setLongitudeAwal(longSimpan);
+          
+          setRadiusPresensiMeter(String(data.radiusPresensiMeter ?? 100));
+          
+          const zonaTersimpan = data.zonaWaktu || 'Asia/Makassar';
+          setZonaWaktu(ZONA_WAKTU_VALID.includes(zonaTersimpan) ? zonaTersimpan : 'Asia/Makassar');
         }
 
         setLoading(false);
@@ -159,11 +177,109 @@ export default function Pengaturan() {
     });
   };
 
+  const handleAmbilLokasiSekolah = () => {
+    if (!navigator.geolocation) {
+      alert('Browser tidak mendukung layanan lokasi GPS.');
+      return;
+    }
+
+    setSedangAmbilLokasi(true);
+    setAkurasiGPS(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const akurasi = position.coords.accuracy;
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          !Number.isFinite(akurasi) ||
+          akurasi < 0
+        ) {
+          setSedangAmbilLokasi(false);
+          alert('Data lokasi yang diterima tidak valid. Silakan coba kembali.');
+          return;
+        }
+
+        setLatitudeSekolah(latitude.toFixed(7));
+        setLongitudeSekolah(longitude.toFixed(7));
+        setAkurasiGPS(akurasi);
+        setSedangAmbilLokasi(false);
+
+        if (akurasi > 50) {
+          alert(`Lokasi berhasil diambil, tetapi akurasinya masih rendah (±${Math.round(akurasi)} meter). Sebaiknya ulangi pengambilan di area terbuka.`);
+        } else {
+          alert(`Lokasi berhasil diambil dengan akurasi sekitar ±${Math.round(akurasi)} meter. Periksa koordinat lalu klik Simpan Pengaturan.`);
+        }
+      },
+      (error) => {
+        setSedangAmbilLokasi(false);
+        if (error.code === 1) {
+          alert('Izin lokasi ditolak. Aktifkan izin lokasi pada browser.');
+        } else if (error.code === 2) {
+          alert('Lokasi tidak tersedia. Periksa GPS atau koneksi perangkat.');
+        } else {
+          alert('Pengambilan lokasi melewati batas waktu. Silakan coba kembali.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const handleSimpan = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (jenjangSekolah.length === 0) {
       alert('Pilih minimal satu jenjang pendidikan: SD, SMP, atau keduanya.');
+      return;
+    }
+
+    const latitudeDiisi = latitudeSekolah.trim() !== '';
+    const longitudeDiisi = longitudeSekolah.trim() !== '';
+
+    if (latitudeDiisi !== longitudeDiisi) {
+      alert('Latitude dan Longitude harus diisi bersamaan.');
+      return;
+    }
+
+    let latitudeSimpan: number | null = null;
+    let longitudeSimpan: number | null = null;
+
+    if (latitudeDiisi && longitudeDiisi) {
+      latitudeSimpan = Number(latitudeSekolah);
+      longitudeSimpan = Number(longitudeSekolah);
+
+      if (
+        !Number.isFinite(latitudeSimpan) ||
+        latitudeSimpan < -90 ||
+        latitudeSimpan > 90 ||
+        !Number.isFinite(longitudeSimpan) ||
+        longitudeSimpan < -180 ||
+        longitudeSimpan > 180
+      ) {
+        alert('Koordinat lokasi sekolah tidak valid.');
+        return;
+      }
+    }
+
+    const radiusSimpan = Number(radiusPresensiMeter);
+    if (
+      !Number.isInteger(radiusSimpan) ||
+      radiusSimpan < 10 ||
+      radiusSimpan > 1000
+    ) {
+      alert('Radius presensi harus berupa bilangan bulat antara 10 sampai 1.000 meter.');
+      return;
+    }
+
+    if (!ZONA_WAKTU_VALID.includes(zonaWaktu)) {
+      alert('Zona waktu tidak valid. Pilih WIB, WITA, atau WIT.');
       return;
     }
 
@@ -212,7 +328,6 @@ export default function Pengaturan() {
         }
       }
 
-      // merge:true menjaga field lain pada dokumen pengaturan/sekolah.
       await setDoc(
         doc(db, 'pengaturan', 'sekolah'),
         {
@@ -225,11 +340,17 @@ export default function Pengaturan() {
           jenjangSekolah: urutkanJenjang(jenjangSekolah),
           updatedAt: new Date().toISOString(),
           konfigurasiJenjangUpdatedAt: new Date().toISOString(),
+          latitudeSekolah: latitudeSimpan,
+          longitudeSekolah: longitudeSimpan,
+          radiusPresensiMeter: radiusSimpan,
+          zonaWaktu,
         },
         { merge: true }
       );
 
       setJenjangAwal(urutkanJenjang(jenjangSekolah));
+      setLatitudeAwal(latitudeSekolah);
+      setLongitudeAwal(longitudeSekolah);
       alert('Pengaturan sekolah berhasil disimpan.');
     } catch (error) {
       console.error('Gagal menyimpan pengaturan:', error);
@@ -251,17 +372,45 @@ export default function Pengaturan() {
     ? 'SD dan SMP (Gabungan)'
     : jenjangSekolah[0] || 'Belum dipilih';
 
+  // Status lokasi membedakan koordinat yang belum disimpan dan yang sudah tersimpan.
+  // Setelah halaman dimuat ulang, akurasi lama tidak diketahui karena memang tidak disimpan.
+  const adaKoordinat = latitudeSekolah.trim() !== '' && longitudeSekolah.trim() !== '';
+  const koordinatBerubah =
+    latitudeSekolah !== latitudeAwal || longitudeSekolah !== longitudeAwal;
+  const akurasiRendah = akurasiGPS !== null && akurasiGPS > 50;
+
+  let statusTeks = 'Lokasi Belum Diatur';
+  let statusWarna = 'bg-slate-100 text-slate-600';
+
+  if (adaKoordinat) {
+    if (akurasiRendah) {
+      statusTeks = 'Akurasi Perlu Diperiksa';
+      statusWarna = 'bg-amber-100 text-amber-700';
+    } else if (koordinatBerubah) {
+      statusTeks = 'Koordinat Terisi (Belum Disimpan)';
+      statusWarna = 'bg-blue-100 text-blue-700';
+    } else if (akurasiGPS !== null) {
+      statusTeks = 'Koordinat Tersimpan · Akurasi Terukur';
+      statusWarna = 'bg-emerald-100 text-emerald-700';
+    } else {
+      statusTeks = 'Koordinat Tersimpan · Akurasi Belum Diperiksa';
+      statusWarna = 'bg-slate-100 text-slate-700';
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto pb-10">
       <div>
         <h1 className="text-2xl font-bold text-[#082B62]">Pengaturan Sekolah</h1>
         <p className="text-slate-500 mt-1 font-medium">
-          Atur identitas dan jenjang pendidikan yang dikelola sekolah.
+          Atur identitas, jenjang pendidikan, dan lokasi presensi.
         </p>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <form onSubmit={handleSimpan} className="space-y-5">
+          
+          {/* IDENTITAS SEKOLAH */}
           <div>
             <h2 className="text-lg font-bold text-[#082B62]">Identitas Sekolah</h2>
             <p className="text-xs text-slate-500 mt-1">Informasi ini akan ditampilkan di bagian aplikasi yang menggunakan identitas sekolah.</p>
@@ -269,76 +418,37 @@ export default function Pengaturan() {
 
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-1">Nama Sekolah</label>
-            <input
-              type="text"
-              value={namaSekolah}
-              onChange={(e) => setNamaSekolah(e.target.value)}
-              required
-              placeholder="Contoh: SD Inpres 12/79 Lappabosse"
-              className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
-            />
+            <input type="text" value={namaSekolah} onChange={(e) => setNamaSekolah(e.target.value)} required placeholder="Contoh: SD Inpres 12/79 Lappabosse" className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">NPSN</label>
-              <input
-                type="text"
-                value={npsn}
-                onChange={(e) => setNpsn(e.target.value)}
-                required
-                placeholder="Contoh: 40312345"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
-              />
+              <input type="text" value={npsn} onChange={(e) => setNpsn(e.target.value)} required placeholder="Contoh: 40312345" className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium" />
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">Nama Kepala Sekolah</label>
-              <input
-                type="text"
-                value={kepalaSekolah}
-                onChange={(e) => setKepalaSekolah(e.target.value)}
-                required
-                placeholder="Contoh: Hj. Siti Aminah, M.Pd."
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
-              />
+              <input type="text" value={kepalaSekolah} onChange={(e) => setKepalaSekolah(e.target.value)} required placeholder="Contoh: Hj. Siti Aminah, M.Pd." className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium" />
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-1">Alamat Lengkap</label>
-            <textarea
-              value={alamat}
-              onChange={(e) => setAlamat(e.target.value)}
-              required
-              rows={2}
-              placeholder="Contoh: Jl. Pendidikan No. 1, Kecamatan, Kabupaten"
-              className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium resize-none"
-            />
+            <textarea value={alamat} onChange={(e) => setAlamat(e.target.value)} required rows={2} placeholder="Contoh: Jl. Pendidikan No. 1, Kecamatan, Kabupaten" className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium resize-none" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">Website (Opsional)</label>
-              <input
-                type="text"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                placeholder="Contoh: www.sekolah.sch.id"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
-              />
+              <input type="text" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Contoh: www.sekolah.sch.id" className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium" />
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">Email Sekolah</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Contoh: admin@sekolah.sch.id"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
-              />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Contoh: admin@sekolah.sch.id" className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium" />
             </div>
           </div>
 
+          {/* KONFIGURASI JENJANG */}
           <div className="border-t border-slate-100 pt-5 space-y-4">
             <div>
               <h2 className="text-lg font-bold text-[#082B62]">Konfigurasi Jenjang Pendidikan</h2>
@@ -347,12 +457,7 @@ export default function Pengaturan() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${jenjangSekolah.includes('SD') ? 'border-[#155EEF] bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}>
-                <input
-                  type="checkbox"
-                  checked={jenjangSekolah.includes('SD')}
-                  onChange={() => toggleJenjang('SD')}
-                  className="mt-1 accent-blue-600"
-                />
+                <input type="checkbox" checked={jenjangSekolah.includes('SD')} onChange={() => toggleJenjang('SD')} className="mt-1 accent-blue-600" />
                 <span>
                   <span className="block font-bold text-[#082B62]">Sekolah Dasar (SD)</span>
                   <span className="block text-xs text-slate-500 mt-1">Tingkat I sampai VI</span>
@@ -360,12 +465,7 @@ export default function Pengaturan() {
               </label>
 
               <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${jenjangSekolah.includes('SMP') ? 'border-[#155EEF] bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}>
-                <input
-                  type="checkbox"
-                  checked={jenjangSekolah.includes('SMP')}
-                  onChange={() => toggleJenjang('SMP')}
-                  className="mt-1 accent-blue-600"
-                />
+                <input type="checkbox" checked={jenjangSekolah.includes('SMP')} onChange={() => toggleJenjang('SMP')} className="mt-1 accent-blue-600" />
                 <span>
                   <span className="block font-bold text-[#082B62]">Sekolah Menengah Pertama (SMP)</span>
                   <span className="block text-xs text-slate-500 mt-1">Tingkat VII sampai IX</span>
@@ -375,7 +475,6 @@ export default function Pengaturan() {
 
             <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
               <p className="text-sm font-bold text-blue-800">Konfigurasi saat ini: {labelJenjang}</p>
-              <p className="text-xs text-blue-700 mt-1">Jika kedua pilihan dicentang, aplikasi akan disiapkan untuk sekolah gabungan SD dan SMP.</p>
             </div>
 
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
@@ -383,6 +482,92 @@ export default function Pengaturan() {
             </div>
           </div>
 
+          {/* PENGATURAN LOKASI PRESENSI */}
+          <div className="border-t border-slate-100 pt-5 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <h2 className="text-lg font-bold text-[#082B62]">Pengaturan Lokasi Presensi</h2>
+                <p className="text-sm text-slate-500 mt-1">Tentukan titik lokasi sekolah sebagai acuan pemeriksaan presensi guru.</p>
+              </div>
+              <div>
+                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${statusWarna}`}>
+                  {statusTeks}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                onClick={handleAmbilLokasiSekolah}
+                disabled={sedangAmbilLokasi}
+                className="px-5 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:bg-slate-400"
+              >
+                {sedangAmbilLokasi ? 'Mengambil lokasi...' : 'Ambil Lokasi dari GPS'}
+              </button>
+              
+              {akurasiGPS !== null && (
+                <div className={`text-sm font-semibold ${akurasiGPS > 50 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  Akurasi: ±{Math.round(akurasiGPS)} meter
+                  {akurasiGPS > 50 && <span className="block text-xs font-normal">(Sebaiknya ambil ulang di area terbuka)</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Latitude</label>
+                <input 
+                  type="number" 
+                  step="any" 
+                  value={latitudeSekolah} 
+                  onChange={(e) => { setLatitudeSekolah(e.target.value); setAkurasiGPS(null); }}
+                  placeholder="Contoh: -5.0000000" 
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Longitude</label>
+                <input 
+                  type="number" 
+                  step="any" 
+                  value={longitudeSekolah} 
+                  onChange={(e) => { setLongitudeSekolah(e.target.value); setAkurasiGPS(null); }}
+                  placeholder="Contoh: 120.0000000" 
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl" 
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-1">Radius Presensi (Meter)</label>
+              <input
+                type="number"
+                min="10"
+                max="1000"
+                step="1"
+                value={radiusPresensiMeter}
+                onChange={(e) => setRadiusPresensiMeter(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl"
+              />
+              <p className="text-xs text-slate-500 mt-1">Contoh 100 meter berarti presensi hanya dapat dilakukan dalam radius 100 meter dari titik sekolah.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-1">Zona Waktu Sekolah</label>
+              <select value={zonaWaktu} onChange={(e) => setZonaWaktu(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-xl">
+                <option value="Asia/Jakarta">WIB (Asia/Jakarta)</option>
+                <option value="Asia/Makassar">WITA (Asia/Makassar)</option>
+                <option value="Asia/Jayapura">WIT (Asia/Jayapura)</option>
+              </select>
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Pastikan Admin mengambil koordinat ketika berada tepat di lingkungan sekolah. Koordinat ini menjadi titik acuan pemeriksaan jarak presensi.
+            </div>
+          </div>
+
+          {/* WHATSAPP SEKOLAH (UTUH) */}
           <div className="border-t border-slate-100 pt-5 space-y-4">
             <div>
               <h2 className="text-lg font-bold text-[#082B62]">WhatsApp Sekolah</h2>
@@ -502,11 +687,7 @@ export default function Pengaturan() {
           </div>
 
           <div className="flex justify-end pt-4 border-t border-slate-100">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className={`px-6 py-2.5 text-white font-bold rounded-xl shadow-md transition-all ${isSaving ? 'bg-slate-400' : 'bg-[#155EEF] hover:bg-blue-700 shadow-blue-500/30'}`}
-            >
+            <button type="submit" disabled={isSaving} className={`px-6 py-2.5 text-white font-bold rounded-xl shadow-md transition-all ${isSaving ? 'bg-slate-400' : 'bg-[#155EEF] hover:bg-blue-700 shadow-blue-500/30'}`}>
               {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>
           </div>
