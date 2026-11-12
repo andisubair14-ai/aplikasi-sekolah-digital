@@ -23,6 +23,7 @@ import * as XLSX from 'xlsx';
 interface Guru {
   id: string;
   nama: string;
+  jenisKelamin?: string;
   nip: string;
   nuptk: string;
   mapel: string;
@@ -85,6 +86,7 @@ export default function DataPegawai() {
   const [editId, setEditId] = useState<string | null>(null);
 
   const [nama, setNama] = useState('');
+  const [jenisKelamin, setJenisKelamin] = useState('');
   const [nip, setNip] = useState('');
   const [nuptk, setNuptk] = useState('');
   const [mapel, setMapel] = useState('');
@@ -264,6 +266,7 @@ export default function DataPegawai() {
     const formatData = [
       {
         'Nama Lengkap': 'Budi Santoso, S.Pd.',
+        'Jenis Kelamin': 'Laki-laki',
         'NIP': '1987654321',
         'NUPTK': '1234567890123456',
         'Mata Pelajaran': 'Matematika',
@@ -274,6 +277,7 @@ export default function DataPegawai() {
       },
       {
         'Nama Lengkap': 'Siti Aminah, S.Pd.',
+        'Jenis Kelamin': 'Perempuan',
         'NIP': '1987654322',
         'NUPTK': '',
         'Mata Pelajaran': '',
@@ -303,6 +307,7 @@ export default function DataPegawai() {
       const penugasanWali = getPenugasanWali(guru);
       return {
         'Nama Lengkap': guru.nama,
+        'Jenis Kelamin': guru.jenisKelamin || '',
         'NIP': guru.nip,
         'NUPTK': guru.nuptk,
         'Mata Pelajaran': guru.mapel,
@@ -349,6 +354,10 @@ export default function DataPegawai() {
 
         const dataSiapSimpan = jsonData.map((row, index) => {
           const jabatanExcel = String(row.Jabatan || 'Guru Mata Pelajaran').trim();
+          const jenisKelaminExcel = String(row['Jenis Kelamin'] || '').trim();
+          if (jenisKelaminExcel && !['Laki-laki', 'Perempuan'].includes(jenisKelaminExcel)) {
+            throw new Error(`Jenis Kelamin pada baris ${index + 2} harus Laki-laki atau Perempuan.`);
+          }
 
           if (!pilihanJabatan.includes(jabatanExcel)) {
             throw new Error(`Jabatan pada baris ${index + 2} tidak dikenal: ${jabatanExcel}`);
@@ -389,6 +398,7 @@ export default function DataPegawai() {
 
           return {
             nama: String(row['Nama Lengkap'] || '-').trim(),
+            jenisKelamin: jenisKelaminExcel,
             nip: String(row.NIP || '-').trim(),
             nuptk: String(row.NUPTK || '').trim(),
             mapel: jabatanExcel === 'Guru Mata Pelajaran'
@@ -442,6 +452,7 @@ export default function DataPegawai() {
   const handleOpenTambah = () => {
     setEditId(null);
     setNama('');
+    setJenisKelamin('');
     setNip('');
     setNuptk('');
     setMapel('');
@@ -458,6 +469,7 @@ export default function DataPegawai() {
   const handleOpenEdit = (guru: Guru) => {
     setEditId(guru.id);
     setNama(guru.nama || '');
+    setJenisKelamin(guru.jenisKelamin || '');
     setNip(guru.nip || '');
     setNuptk(guru.nuptk || '');
     setMapel(guru.mapel || '');
@@ -514,6 +526,7 @@ export default function DataPegawai() {
     try {
       const dataBaru: Record<string, any> = {
         nama: nama.trim(),
+        jenisKelamin,
         nip: nip.trim(),
         nuptk: nuptk.trim(),
         mapel: jabatan === 'Wali Kelas'
@@ -914,6 +927,19 @@ export default function DataPegawai() {
                     required
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Jenis Kelamin</label>
+                  <select
+                    value={jenisKelamin}
+                    onChange={(e) => setJenisKelamin(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#155EEF] outline-none bg-white font-medium"
+                  >
+                    <option value="">Belum dipilih</option>
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
                 </div>
 
                 <div>

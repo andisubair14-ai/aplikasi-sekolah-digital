@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import FotoProfilKepsek from '../components/FotoProfilKepsek';
+import ilustrasiGuruLakiLaki from '../assets/ilustrasi-guru-laki-laki.png';
+import ilustrasiGuruPerempuan from '../assets/ilustrasi-guru-perempuan.png';
 import { useAuth } from '../contexts/AuthContext';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -101,6 +105,14 @@ function StatIcon({ name }: { name: StatIconName }) {
 export default function KepsekDashboard() {
   const { userData } = useAuth();
   const namaKepsek = userData?.nama || 'Kepala Sekolah';
+  // Sama persis dengan Dashboard Guru: jenis kelamin dibaca dari userData AuthContext.
+  const ilustrasiKepsek =
+    userData?.jenisKelamin === 'Perempuan'
+      ? ilustrasiGuruPerempuan
+      : userData?.jenisKelamin === 'Laki-laki'
+        ? ilustrasiGuruLakiLaki
+        : null;
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
   const [siswaList, setSiswaList] = useState<DashboardRow[]>([]);
   const [pegawaiList, setPegawaiList] = useState<DashboardRow[]>([]);
@@ -191,115 +203,336 @@ export default function KepsekDashboard() {
     (!activeSemester || item.semester === activeSemester)
   ).length;
 
-  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative overflow-hidden sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
+  const bulanNama = calendarMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const hariPertama = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+  const jumlahHari = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+  const offsetSenin = (hariPertama.getDay() + 6) % 7;
+  const tanggalHariIni = new Date();
+  const namaTanggal = tanggalHariIni.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const calendarCells: (number | null)[] = [
+    ...Array.from({ length: offsetSenin }, () => null),
+    ...Array.from({ length: jumlahHari }, (_, index) => index + 1),
+  ];
+  while (calendarCells.length % 7 !== 0) calendarCells.push(null);
+
+  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100/90 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
-      <div className="relative bg-[#082B62] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#082B62] via-[#082B62]/90 to-[#155EEF]/50" />
-        <div className="relative z-10 flex items-center gap-6 px-8 sm:px-12 py-6 w-full">
-          <div>
-            <h1 className="text-xl sm:text-2xl text-blue-100 font-medium mb-1">Executive Dashboard</h1>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-wide">Selamat Datang, {namaKepsek}</h2>
-            <p className="text-blue-50 text-sm sm:text-base font-medium">Ringkasan monitoring sekolah berdasarkan data aktual.</p>
-            {activePeriod ? (
-              <div className="mt-3 inline-flex flex-col gap-1 rounded-xl border border-white/20 bg-white/15 px-4 py-2 shadow-sm sm:flex-row sm:items-center sm:gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Periode Akademik Berjalan</span>
-                <span className="text-sm font-extrabold text-white sm:text-base">
-                  Tahun Pelajaran {activePeriod.tahun} <span className="text-blue-200">·</span> Semester {activeSemester || '-'}
+    <div className="mx-auto max-w-[1600px] space-y-5 pb-10">
+      <style>{`
+        @keyframes kepsek-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-9px); }
+        }
+        .kepsek-illustration { animation: kepsek-float 3.4s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .kepsek-illustration { animation: none; }
+        }
+      `}</style>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <main className="min-w-0 space-y-5">
+          {/* Banner mengikuti struktur Dashboard Guru */}
+          <section className="relative isolate flex min-h-[220px] overflow-hidden rounded-[28px] bg-gradient-to-br from-[#123D83] via-[#155EEF] to-[#3188E8] p-4 text-white shadow-xl sm:min-h-[250px] sm:p-6">
+            <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute bottom-0 right-1/4 h-32 w-32 rounded-full bg-cyan-300/10 blur-2xl" />
+            <div className="relative z-10 flex w-full items-center gap-1 sm:gap-2">
+              <div className="flex w-[27%] shrink-0 items-center justify-center sm:w-[28%]">
+                {ilustrasiKepsek && (
+                  <img
+                    src={ilustrasiKepsek}
+                    alt="Ilustrasi Kepala Sekolah"
+                    className="kepsek-illustration h-44 w-full max-w-[160px] object-contain object-center drop-shadow-2xl sm:h-56 sm:max-w-[230px]"
+                  />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[9px] font-bold tracking-[0.12em] text-blue-100 sm:text-xs sm:tracking-[0.16em]">
+                  EXECUTIVE DASHBOARD
                 </span>
+                <p className="mt-2 text-xs font-medium text-blue-100 sm:mt-3 sm:text-lg">Selamat datang kembali,</p>
+                <h1 className="mt-1 break-words text-xl font-extrabold leading-tight tracking-tight sm:text-4xl">{namaKepsek}</h1>
+                <p className="mt-2 max-w-lg text-[11px] leading-4 text-blue-100 sm:mt-3 sm:text-sm sm:leading-6">
+                  Pantau perkembangan sekolah, kehadiran siswa, dan aktivitas pembelajaran dalam satu tempat.
+                </p>
+                {activePeriod ? (
+                  <div className="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-[10px] font-semibold sm:mt-4 sm:text-sm">
+                    <span className="text-blue-100">Tahun Pelajaran</span>
+                    <span>{activePeriod.tahun || '-'}</span>
+                    <span className="text-blue-200">·</span>
+                    <span>Semester {activeSemester || '-'}</span>
+                  </div>
+                ) : (
+                  <p className="mt-3 inline-flex rounded-xl bg-amber-300/15 px-3 py-2 text-[10px] font-semibold text-amber-100 sm:mt-4 sm:text-xs">
+                    Tahun ajaran aktif belum diatur
+                  </p>
+                )}
               </div>
-            ) : (
-              <p className="mt-3 inline-flex rounded-xl border border-amber-200/40 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-100">
-                Belum ada tahun pelajaran dan semester aktif
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {errorMessage && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">{errorMessage}</div>}
-
-      <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="users" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Total Siswa Aktif</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(siswaAktif.length)}</h3>
-        </div>
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#10B981] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="briefcase" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Total Pegawai</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(pegawaiList.length)}</h3>
-        </div>
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="school" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Rombel Tahun Aktif</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(kelasAktif.length)}</h3>
-        </div>
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="clipboard-check" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Jurnal Menunggu Persetujuan</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(jurnalMenunggu)}</h3>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold text-[#082B62] text-lg">Tren Kehadiran Sekolah</h3>
-          <p className="text-xs text-slate-500 mt-1 mb-6">Persentase siswa hadir dibandingkan jumlah siswa aktif.</p>
-          {hasTrendData ? (
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs><linearGradient id="colorKepsekReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#155EEF" stopOpacity={0.3} /><stop offset="95%" stopColor="#155EEF" stopOpacity={0} /></linearGradient></defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} dy={10} />
-                  <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} unit="%" />
-                  <Tooltip formatter={(value) => value == null ? ['Belum ada data', 'Kehadiran'] : [`${value}%`, 'Kehadiran']} labelFormatter={(_, payload) => payload?.[0]?.payload?.tanggal || ''} contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                  <Area type="monotone" dataKey="hadir" connectNulls={false} stroke="#155EEF" strokeWidth={4} fillOpacity={1} fill="url(#colorKepsekReal)" dot={{ fill: '#155EEF', strokeWidth: 2, r: 4, stroke: '#fff' }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="shrink-0">
+                <Link
+                  to="/kepsek/profil"
+                  className="group flex flex-col items-center justify-center gap-1 rounded-xl p-1.5 text-center transition-colors hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  title="Buka Profil Kepala Sekolah"
+                  aria-label="Buka Profil Kepala Sekolah"
+                >
+                  <FotoProfilKepsek
+                    uid={userData?.uid}
+                    nama={namaKepsek}
+                    className="h-10 w-10 border-2 border-white/80 text-sm shadow-lg transition-transform group-hover:scale-105 sm:h-12 sm:w-12 sm:text-base"
+                  />
+                  <span className="text-[10px] font-semibold leading-tight text-blue-100 transition-colors group-hover:text-white sm:text-xs">
+                    Kepsek Sekolah
+                  </span>
+                </Link>
+              </div>
             </div>
-          ) : (
-            <div className="h-72 flex items-center justify-center text-center text-slate-500 text-sm">Belum ada catatan absensi dalam 7 hari terakhir.</div>
-          )}
-        </div>
+          </section>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <h3 className="font-bold text-[#082B62] text-lg">Rincian Kehadiran Sekolah Hari Ini</h3>
-          {siswaAktif.length > 0 ? (
-            <>
-              <div className="flex-1 relative flex items-center justify-center min-h-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={kehadiran.pieData} cx="50%" cy="50%" innerRadius={72} outerRadius={96} paddingAngle={1} dataKey="value" stroke="none">
-                      {kehadiran.pieData.map((item, index) => <Cell key={item.name} fill={COLORS[index]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-3xl font-extrabold text-[#082B62]">{kehadiran.persentaseHadir}%</span>
-                  <span className="text-sm font-semibold text-slate-500 mt-1">Hadir</span>
+          {errorMessage && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              {errorMessage}
+            </div>
+          )}
+
+          {/* Kartu AI bersifat informasi sampai integrasi tersedia */}
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="relative overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-[#F5F0FF] to-white p-5 shadow-sm">
+              <div className="absolute -right-5 -top-8 h-28 w-28 rounded-full bg-violet-200/40 blur-xl" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-xl text-white shadow-md">✦</div>
+                <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Segera hadir</span>
+              </div>
+              <h2 className="relative mt-4 text-base font-extrabold text-slate-900 sm:text-lg">AI Asisten Kepala Sekolah</h2>
+              <p className="relative mt-1 max-w-sm text-xs leading-5 text-slate-600 sm:text-sm">
+                Dukungan AI untuk membantu menyiapkan analisis dan ringkasan pengelolaan sekolah.
+              </p>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-br from-[#EAFBFF] to-white p-5 shadow-sm">
+              <div className="absolute -right-5 -top-8 h-28 w-28 rounded-full bg-cyan-200/40 blur-xl" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-600 text-xl text-white shadow-md">✧</div>
+                <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-700">Segera hadir</span>
+              </div>
+              <h2 className="relative mt-4 text-base font-extrabold text-slate-900 sm:text-lg">AI Analisis Sekolah</h2>
+              <p className="relative mt-1 max-w-sm text-xs leading-5 text-slate-600 sm:text-sm">
+                Ringkasan berbantuan AI untuk mendukung evaluasi data dan perencanaan sekolah.
+              </p>
+            </div>
+          </section>
+
+          {/* Statistik Firestore asli Kepsek tetap dipertahankan */}
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { label: 'Total Siswa Aktif', value: siswaAktif.length, icon: 'users' as const },
+              { label: 'Total Pegawai', value: pegawaiList.length, icon: 'briefcase' as const },
+              { label: 'Rombel Tahun Aktif', value: kelasAktif.length, icon: 'school' as const },
+              { label: 'Jurnal Menunggu Persetujuan', value: jurnalMenunggu, icon: 'clipboard-check' as const }
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.label}</p>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                    <StatIcon name={item.icon} />
+                  </span>
                 </div>
+                <p className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                  {loading ? '...' : formatIndonesianNumber(item.value)}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400 sm:text-xs">Data diperbarui dari Firestore</p>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-600">Hadir</span><b className="text-emerald-600">{kehadiran.hadir}</b></div>
-                <div className="flex justify-between"><span className="text-slate-600">Sakit / Izin / Alpa</span><b className="text-amber-600">{kehadiran.tidakHadir}</b></div>
-                <div className="flex justify-between"><span className="text-slate-600">Belum diisi</span><b className="text-slate-500">{kehadiran.belumDiisi}</b></div>
+            ))}
+          </section>
+
+          {/* Grafik dan rincian kehadiran asli */}
+          <section className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.85fr)]">
+            <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-5">
+                <h2 className="font-extrabold text-slate-900">Tren Kehadiran Sekolah</h2>
+                <p className="mt-1 text-xs text-slate-500">Persentase siswa yang tercatat hadir dalam 7 hari terakhir.</p>
               </div>
-            </>
-          ) : (
-            <div className="flex-1 min-h-[220px] flex items-center justify-center text-center text-slate-500 text-sm">Belum ada siswa aktif pada tahun ajaran ini.</div>
-          )}
-        </div>
+              {hasTrendData ? (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trend} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorKepsekReal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#155EEF" stopOpacity={0.28} />
+                          <stop offset="95%" stopColor="#155EEF" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8EEF6" />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} dy={8} />
+                      <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} unit="%" />
+                      <Tooltip
+                        formatter={(value) => value == null ? ['Belum ada data', 'Kehadiran'] : [`${value}%`, 'Kehadiran']}
+                        labelFormatter={(_, payload) => payload?.[0]?.payload?.tanggal || ''}
+                        contentStyle={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}
+                      />
+                      <Area type="monotone" dataKey="hadir" connectNulls={false} stroke="#155EEF" strokeWidth={3} fillOpacity={1} fill="url(#colorKepsekReal)" dot={{ fill: '#155EEF', strokeWidth: 2, r: 3, stroke: '#fff' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-slate-500">
+                  Belum ada catatan absensi dalam 7 hari terakhir.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+              <h2 className="font-extrabold text-slate-900">Kehadiran Sekolah Hari Ini</h2>
+              <p className="mt-1 text-xs text-slate-500">Ringkasan status kehadiran seluruh siswa aktif.</p>
+              {siswaAktif.length > 0 ? (
+                <>
+                  <div className="relative flex min-h-[210px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height={210}>
+                      <PieChart>
+                        <Pie data={kehadiran.pieData} cx="50%" cy="50%" innerRadius={62} outerRadius={86} paddingAngle={1} dataKey="value" stroke="none">
+                          {kehadiran.pieData.map((item, index) => <Cell key={item.name} fill={COLORS[index]} />)}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-extrabold text-slate-900">{kehadiran.persentaseHadir}%</span>
+                      <span className="mt-1 text-xs font-semibold text-slate-500">Hadir</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-600">Hadir</span><b className="text-emerald-600">{kehadiran.hadir}</b></div>
+                    <div className="flex justify-between"><span className="text-slate-600">Sakit / Izin / Alpa</span><b className="text-amber-600">{kehadiran.tidakHadir}</b></div>
+                    <div className="flex justify-between"><span className="text-slate-600">Belum diisi</span><b className="text-slate-500">{kehadiran.belumDiisi}</b></div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex min-h-[240px] items-center justify-center text-center text-sm text-slate-500">
+                  Belum ada siswa aktif pada tahun ajaran ini.
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Ringkasan monitoring asli */}
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <h2 className="font-extrabold text-slate-900">Ringkasan Monitoring</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Hari ini tercatat {kehadiran.hadir} siswa hadir, {kehadiran.tidakHadir} siswa berstatus sakit/izin/alpa, dan {kehadiran.belumDiisi} siswa belum memiliki catatan absensi.
+            </p>
+            <p className="mt-2 text-xs text-slate-400">Angka diperbarui otomatis dari Firestore. Tanggal hari ini: {today}.</p>
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+              <div className="absolute -right-5 -top-8 h-28 w-28 rounded-full bg-blue-200/40 blur-xl" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-xl text-white shadow-md">⌂</div>
+                <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-700">Monitoring</span>
+              </div>
+              <h2 className="relative mt-4 text-base font-extrabold text-slate-900 sm:text-lg">Pemantauan Sekolah</h2>
+              <p className="relative mt-1 max-w-sm text-xs leading-5 text-slate-600 sm:text-sm">
+                Pantau data siswa, pegawai, rombongan belajar, dan kehadiran sekolah dari ringkasan dashboard.
+              </p>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50 to-white p-5 shadow-sm">
+              <div className="absolute -right-5 -top-8 h-28 w-28 rounded-full bg-cyan-200/40 blur-xl" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-600 text-xl text-white shadow-md">✧</div>
+                <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-700">Ringkasan data</span>
+              </div>
+              <h2 className="relative mt-4 text-base font-extrabold text-slate-900 sm:text-lg">Evaluasi Kehadiran</h2>
+              <p className="relative mt-1 max-w-sm text-xs leading-5 text-slate-600 sm:text-sm">
+                Persentase dan rincian kehadiran siswa mengikuti catatan absensi yang masuk ke sistem.
+              </p>
+            </div>
+          </section>
+        </main>
+
+        {/* Kolom kanan mengikuti pola Dashboard Guru */}
+        <aside className="min-w-0 space-y-5">
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="font-extrabold text-slate-900">Kalender Sekolah</h2>
+                <p className="mt-1 text-xs text-slate-500">Lihat tanggal dan hari berjalan.</p>
+              </div>
+              <span className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700">Hari ini</span>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <button type="button" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Bulan sebelumnya">‹</button>
+              <h3 className="text-sm font-bold capitalize text-slate-800">{bulanNama}</h3>
+              <button type="button" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Bulan berikutnya">›</button>
+            </div>
+            <div className="mt-4 grid grid-cols-7 gap-y-2 text-center">
+              {['Sn', 'Sl', 'Rb', 'Km', 'Jm', 'Sb', 'Mg'].map((day) => (
+                <span key={day} className="pb-1 text-[10px] font-bold text-slate-400">{day}</span>
+              ))}
+              {calendarCells.map((day, index) => {
+                const isToday = day === tanggalHariIni.getDate() &&
+                  calendarMonth.getMonth() === tanggalHariIni.getMonth() &&
+                  calendarMonth.getFullYear() === tanggalHariIni.getFullYear();
+                return (
+                  <span key={`${day ?? 'blank'}-${index}`} className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs ${isToday ? 'bg-blue-600 font-extrabold text-white shadow-md' : day ? 'text-slate-700 hover:bg-slate-100' : 'text-transparent'}`}>
+                    {day || '·'}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="mt-4 rounded-xl bg-slate-50 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tanggal sekarang</p>
+              <p className="mt-1 text-xs font-bold capitalize text-slate-700">{namaTanggal}</p>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="font-extrabold text-slate-900">Agenda Sekolah</h2>
+                <p className="mt-1 text-xs text-slate-500">Informasi kegiatan sekolah.</p>
+              </div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-lg text-blue-600">▦</span>
+            </div>
+            <div className="mt-4 rounded-xl bg-slate-50 px-4 py-7 text-center">
+              <p className="text-sm font-bold text-slate-700">Belum ada agenda ditampilkan</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Bagian ini siap menampilkan agenda setelah sumber data agenda sekolah tersedia.</p>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="font-extrabold text-slate-900">Aktivitas Monitoring</h2>
+                <p className="mt-1 text-xs text-slate-500">Ringkasan kondisi data sekolah.</p>
+              </div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-lg text-emerald-600">✓</span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {[
+                { label: 'Data siswa aktif', value: siswaAktif.length },
+                { label: 'Data pegawai', value: pegawaiList.length },
+                { label: 'Rombel tahun aktif', value: kelasAktif.length },
+                { label: 'Jurnal menunggu persetujuan', value: jurnalMenunggu }
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                  <span className="text-xs text-slate-600">{item.label}</span>
+                  <b className="text-sm tabular-nums text-slate-900">{loading ? '...' : formatIndonesianNumber(item.value)}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-gradient-to-br from-[#123D83] to-[#155EEF] p-5 text-white shadow-lg">
+            <p className="text-xs font-semibold text-blue-100">Pengingat</p>
+            <h2 className="mt-1 text-lg font-extrabold">Pantau perkembangan sekolah</h2>
+            <p className="mt-2 text-xs leading-5 text-blue-100">
+              Periksa data kehadiran, rombongan belajar, dan jurnal yang menunggu persetujuan secara berkala.
+            </p>
+          </section>
+        </aside>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <h3 className="font-bold text-[#082B62] mb-2">Ringkasan Monitoring</h3>
-        <p className="text-sm text-slate-600">Hari ini tercatat {kehadiran.hadir} siswa hadir, {kehadiran.tidakHadir} siswa berstatus sakit/izin/alpa, dan {kehadiran.belumDiisi} siswa belum memiliki catatan absensi.</p>
-        <p className="text-xs text-slate-400 mt-2">Angka diperbarui otomatis dari Firestore. Tanggal hari ini: {today}.</p>
-      </div>
+      <p className="text-center text-[10px] text-slate-400">
+        Data dashboard diperbarui dari Firestore. Tanggal hari ini: {today}.
+      </p>
     </div>
   );
 }

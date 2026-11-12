@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import FotoProfilGuru from '../components/FotoProfilGuru';
+import ilustrasiGuruLakiLaki from '../assets/ilustrasi-guru-laki-laki.png';
+import ilustrasiGuruPerempuan from '../assets/ilustrasi-guru-perempuan.png';
 import { useAuth } from '../contexts/AuthContext';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -33,88 +35,21 @@ type ClassRow = DashboardRow & {
 type GuruProfileRow = DashboardRow & { kelasDiampu?: string[] };
 type YearRow = DashboardRow & { tahun?: string; semester?: string; status?: string };
 type JournalRow = DashboardRow & { userId?: string; guruId?: string; namaGuru?: string; tanggal?: string; createdAt?: string; kelas?: string };
+type ScheduleRow = DashboardRow & { guruId?: string; hari?: string; jamMulai?: string; jamSelesai?: string; mataPelajaran?: string; namaKelas?: string; ruang?: string; tahunAjaran?: string; semester?: string; keterangan?: string };
 
 const COLORS = ['#10B981', '#F59E0B', '#E2E8F0'];
-
-type StatIconName =
-  | 'users'
-  | 'briefcase'
-  | 'clipboard-check'
-  | 'school'
-  | 'book-open'
-  | 'notebook-pen';
-
-function StatIcon({ name }: { name: StatIconName }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className="w-6 h-6"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {name === 'users' && (
-        <>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="10" cy="7" r="4" />
-          <path d="M20 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </>
-      )}
-
-      {name === 'briefcase' && (
-        <>
-          <rect x="3" y="7" width="18" height="13" rx="2" />
-          <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <path d="M3 12h18" />
-          <path d="M10 12v2h4v-2" />
-        </>
-      )}
-
-      {name === 'clipboard-check' && (
-        <>
-          <rect x="5" y="4" width="14" height="17" rx="2" />
-          <path d="M9 4.5h6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1Z" />
-          <path d="m8.5 13 2.2 2.2 4.8-4.8" />
-        </>
-      )}
-
-      {name === 'school' && (
-        <>
-          <path d="m3 9 9-5 9 5" />
-          <path d="M5 10h14" />
-          <path d="M6 10v9M10 10v9M14 10v9M18 10v9" />
-          <path d="M3 21h18M4 19h16" />
-        </>
-      )}
-
-      {name === 'book-open' && (
-        <>
-          <path d="M12 7v14" />
-          <path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H12v18H5.5A2.5 2.5 0 0 0 3 23Z" />
-          <path d="M21 5.5A2.5 2.5 0 0 0 18.5 3H12v18h6.5a2.5 2.5 0 0 1 2.5 2Z" />
-        </>
-      )}
-
-      {name === 'notebook-pen' && (
-        <>
-          <path d="M8 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9" />
-          <path d="M8 2v4M3 9h5M3 14h5" />
-          <path d="m14 16 5.5-5.5a1.8 1.8 0 0 1 2.5 2.5L16.5 19 13 20Z" />
-        </>
-      )}
-    </svg>
-  );
-}
 
 export default function GuruDashboard() {
   const { userData } = useAuth();
   const namaGuru = userData?.nama || 'Bapak/Ibu Guru';
   const guruId = userData?.guruId || null;
   const uid = userData?.uid || null;
+  const ilustrasiGuru =
+  userData?.jenisKelamin === 'Perempuan'
+    ? ilustrasiGuruPerempuan
+    : userData?.jenisKelamin === 'Laki-laki'
+      ? ilustrasiGuruLakiLaki
+      : null;
 
   const [guruData, setGuruData] = useState<GuruProfileRow | null>(null);
   const [kelasList, setKelasList] = useState<ClassRow[]>([]);
@@ -124,6 +59,9 @@ export default function GuruDashboard() {
   const [jurnalUserIdList, setJurnalUserIdList] = useState<JournalRow[]>([]);
   const [jurnalGuruIdList, setJurnalGuruIdList] = useState<JournalRow[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [jadwalList, setJadwalList] = useState<ScheduleRow[]>([]);
+  const [jadwalError, setJadwalError] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
   // Status pemuatan dipisah karena data Guru dimuat bertahap:
   // profil -> rombel yang ditugaskan -> siswa ringkas dan absensi per rombel.
@@ -354,6 +292,37 @@ export default function GuruDashboard() {
   );
   const activeYear = activePeriod?.tahun || null;
 
+  // Jadwal mengajar dibaca khusus untuk ID Guru yang sedang login.
+  useEffect(() => {
+    if (!guruId) {
+      setJadwalList([]);
+      setJadwalError('Akun Guru belum terhubung dengan ID pegawai.');
+      return;
+    }
+
+    setJadwalError('');
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'jadwal_pelajaran'), where('guruId', '==', guruId)),
+      (snap) => {
+        setJadwalList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as ScheduleRow[]);
+        setJadwalError('');
+      },
+      (error) => {
+        console.error('Gagal memuat jadwal mengajar:', error);
+        setJadwalError('Jadwal mengajar belum dapat dimuat. Periksa akses Firestore.');
+      }
+    );
+    return () => unsubscribe();
+  }, [guruId]);
+
+  const namaHariIni = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][new Date().getDay()];
+  const jadwalHariIni = useMemo(() => jadwalList
+    .filter((item) => item.hari === namaHariIni)
+    .filter((item) => !activeYear || !item.tahunAjaran || item.tahunAjaran === activeYear)
+    .filter((item) => !activePeriod?.semester || !item.semester || item.semester === activePeriod.semester)
+    .sort((a, b) => String(a.jamMulai || '').localeCompare(String(b.jamMulai || ''))),
+  [jadwalList, namaHariIni, activeYear, activePeriod?.semester]);
+
   const kelasAktif = useMemo(() => {
     const idsMapel = new Set(kelasMapelIds);
     return kelasList.filter((kelas) => {
@@ -576,157 +545,259 @@ export default function GuruDashboard() {
     }).length;
   }, [jurnalList, uid, activeYear, activePeriod?.semester]);
 
-  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative overflow-hidden sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
+  const bulanNama = calendarMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const hariPertama = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+  const jumlahHari = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+  const offsetSenin = (hariPertama.getDay() + 6) % 7;
+  const tanggalHariIni = new Date();
+  const namaTanggal = tanggalHariIni.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const calendarCells = [
+    ...Array.from({ length: offsetSenin }, () => null),
+    ...Array.from({ length: jumlahHari }, (_, index) => index + 1),
+  ];
+  while (calendarCells.length % 7 !== 0) calendarCells.push(null);
+
+  const quickLinks = [
+    { title: 'Absensi Siswa', detail: 'Kelola kehadiran rombel', icon: '✓', to: '/guru/absensi', tone: 'bg-emerald-50 text-emerald-700' },
+    { title: 'Jurnal Mengajar', detail: 'Catat kegiatan pembelajaran', icon: '▤', to: '/guru/jurnal', tone: 'bg-violet-50 text-violet-700' },
+    { title: 'Jadwal Pelajaran', detail: 'Lihat jadwal mengajar', icon: '◷', to: '/guru/jadwal', tone: 'bg-blue-50 text-blue-700' },
+    { title: 'Profil Saya', detail: 'Perbarui informasi akun', icon: '♙', to: '/guru/profil', tone: 'bg-amber-50 text-amber-700' },
+  ];
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
-      <div className="relative bg-[#155EEF] rounded-3xl overflow-hidden shadow-lg flex items-center min-h-[160px]">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#155EEF] via-[#155EEF]/80 to-transparent" />
-
-        <div className="relative z-10 flex w-full items-center justify-between gap-4 px-5 py-6 sm:gap-6 sm:px-12">
-          <div className="min-w-0 flex-1">
-            <h1 className="mb-1 text-lg font-medium text-blue-100 sm:text-2xl">
-              Selamat Datang,
-            </h1>
-
-            <h2 className="mb-2 break-words text-2xl font-bold tracking-wide text-white sm:text-4xl">
-              {namaGuru}
-            </h2>
-
-            <p className="text-sm font-medium text-blue-50 sm:text-base">
-              Ringkasan tugas mengajar dan kehadiran rombel Anda.
-            </p>
-
-            {activePeriod ? (
-              <div className="mt-3 inline-flex flex-col gap-1 rounded-xl border border-white/20 bg-white/15 px-4 py-2 shadow-sm sm:flex-row sm:items-center sm:gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
-                  Periode Akademik Berjalan
-                </span>
-
-                <span className="text-sm font-extrabold text-white sm:text-base">
-                  Tahun Pelajaran {activePeriod.tahun}{' '}
-                  <span className="text-blue-200">·</span> Semester{' '}
-                  {activePeriod.semester || '-'}
-                </span>
+    <div className="mx-auto max-w-[1600px] space-y-5 pb-10">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <main className="min-w-0 space-y-5">
+          {/* Welcome banner */}
+          <section className="relative isolate flex min-h-[220px] overflow-hidden rounded-[28px] bg-gradient-to-br from-[#123D83] via-[#155EEF] to-[#3188E8] p-4 text-white shadow-xl sm:min-h-[250px] sm:p-6">
+            <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute bottom-0 right-1/4 h-32 w-32 rounded-full bg-cyan-300/10 blur-2xl" />
+            <div className="relative z-10 flex w-full items-center gap-1 sm:gap-2">
+              {/* Ilustrasi dibuat dominan di sisi kiri banner */}
+              <div className="flex w-[27%] shrink-0 items-center justify-center sm:w-[28%]">
+                {ilustrasiGuru && (
+                  <img
+                    src={ilustrasiGuru}
+                    alt="Ilustrasi Guru"
+                    className="h-44 w-full max-w-[160px] object-contain object-center drop-shadow-2xl sm:h-56 sm:max-w-[230px]"
+                  />
+                )}
               </div>
-            ) : (
-              <p className="mt-3 inline-flex rounded-xl border border-amber-200/40 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-100">
-                Belum ada tahun pelajaran dan semester aktif
-              </p>
-            )}
-          </div>
 
-          <Link
-            to="/guru/profil"
-            className="group flex shrink-0 flex-col items-center gap-2 rounded-2xl p-1 text-center transition hover:bg-white/10"
-            title="Buka Profil Saya"
-          >
-            <FotoProfilGuru
-              uid={userData?.uid}
-              nama={namaGuru}
-              className="h-16 w-16 border-2 border-white/80 text-xl shadow-lg sm:h-24 sm:w-24 sm:text-2xl"
-            />
+              {/* Teks sambutan didekatkan ke ilustrasi */}
+              <div className="min-w-0 flex-1">
+                <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[9px] font-bold tracking-[0.12em] text-blue-100 sm:text-xs sm:tracking-[0.16em]">RUANG KERJA GURU</span>
+                <p className="mt-2 text-xs font-medium text-blue-100 sm:mt-3 sm:text-lg">Selamat datang kembali,</p>
+                <h1 className="mt-1 break-words text-xl font-extrabold leading-tight tracking-tight sm:text-4xl">{namaGuru}</h1>
+                <p className="mt-2 max-w-lg text-[11px] leading-4 text-blue-100 sm:mt-3 sm:text-sm sm:leading-6">Pantau kegiatan mengajar, kehadiran siswa, dan aktivitas pembelajaran Anda dalam satu tempat.</p>
+                {activePeriod ? (
+                  <div className="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-[10px] font-semibold sm:mt-4 sm:text-sm">
+                    <span className="text-blue-100">Tahun Pelajaran</span>
+                    <span>{activePeriod.tahun || '-'}</span><span className="text-blue-200">·</span><span>Semester {activePeriod.semester || '-'}</span>
+                  </div>
+                ) : <p className="mt-3 inline-flex rounded-xl bg-amber-300/15 px-3 py-2 text-[10px] font-semibold text-amber-100 sm:mt-4 sm:text-xs">Tahun ajaran aktif belum diatur</p>}
+              </div>
 
-            <span className="text-[11px] font-semibold text-blue-100 group-hover:text-white sm:text-xs">
-              Profil Saya
-            </span>
-          </Link>
-        </div>
-      </div>
-
-      {errorMessage && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">{errorMessage}</div>}
-      {!guruData && guruId && !loading && <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">Profil pegawai untuk akun ini tidak ditemukan pada koleksi guru.</div>}
-
-      <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#155EEF] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="book-open" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Rombel yang Diampu</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(kelasAktif.length)}</h3>
-        </div>
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#10B981] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="users" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Total Siswa Diampu</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(siswaDiampu.length)}</h3>
-        </div>
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="clipboard-check" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Rombel Absensi Belum Lengkap</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(absensiBelumLengkap)}</h3>
-          <p className="text-xs text-slate-500 mt-1">Rombel yang masih memiliki siswa belum diabsen</p>
-        </div>
-        <div className={cardClass}>
-          <div className="w-12 h-12 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-lg mb-4 "><StatIcon name="notebook-pen" /></div>
-          <p className="text-slate-500 font-semibold text-sm">Jurnal Terisi Bulan Ini</p>
-          <h3 className="text-4xl font-extrabold text-[#082B62] mt-1">{loading ? '...' : formatIndonesianNumber(jurnalBulanIni)}</h3>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold text-[#082B62] text-lg">Tren Kehadiran Rombel Anda</h3>
-          <p className="text-xs text-slate-500 mt-1 mb-6">Persentase siswa yang tercatat hadir pada rombel yang Anda ampu.</p>
-          {hasTrendData ? (
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs><linearGradient id="colorGuruReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#155EEF" stopOpacity={0.3} /><stop offset="95%" stopColor="#155EEF" stopOpacity={0} /></linearGradient></defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} dy={10} />
-                  <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 13 }} unit="%" />
-                  <Tooltip formatter={(value) => value == null ? ['Belum ada data', 'Kehadiran'] : [`${value}%`, 'Kehadiran']} labelFormatter={(_, payload) => payload?.[0]?.payload?.tanggal || ''} contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                  <Area type="monotone" dataKey="hadir" connectNulls={false} stroke="#155EEF" strokeWidth={4} fillOpacity={1} fill="url(#colorGuruReal)" dot={{ fill: '#155EEF', strokeWidth: 2, r: 4, stroke: '#fff' }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {/* Profil Guru di sisi kanan banner */}
+              <div className="flex w-[54px] shrink-0 flex-col items-center justify-center sm:w-[82px]">
+                <Link to="/guru/profil" className="group flex flex-col items-center gap-1 rounded-xl p-1 transition hover:bg-white/10" title="Buka Profil Saya">
+                  <FotoProfilGuru uid={userData?.uid} nama={namaGuru} className="h-10 w-10 border-2 border-white/80 text-sm shadow-lg sm:h-14 sm:w-14 sm:text-lg" />
+                  <span className="text-[9px] font-semibold text-blue-100 group-hover:text-white sm:text-xs">Profil Saya</span>
+                </Link>
+              </div>
             </div>
-          ) : (
-            <div className="h-72 flex items-center justify-center text-center text-slate-500 text-sm">Belum ada catatan absensi pada rombel Anda dalam 7 hari terakhir.</div>
-          )}
-        </div>
+          </section>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <h3 className="font-bold text-[#082B62] text-lg">Kehadiran Siswa Hari Ini</h3>
-          {siswaDiampu.length > 0 ? (
-            <>
-              <div className="flex-1 relative flex items-center justify-center min-h-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={absensiHariIni.pieData} cx="50%" cy="50%" innerRadius={72} outerRadius={96} paddingAngle={1} dataKey="value" stroke="none">
-                      {absensiHariIni.pieData.map((item, index) => <Cell key={item.name} fill={COLORS[index]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-3xl font-extrabold text-[#082B62]">{absensiHariIni.persentaseHadir}%</span>
-                  <span className="text-sm font-semibold text-slate-500 mt-1">Hadir</span>
+          {errorMessage && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{errorMessage}</div>}
+          {!guruData && guruId && !loading && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Profil pegawai untuk akun ini tidak ditemukan pada koleksi guru.</div>}
+
+          {/* AI feature cards: informative until the AI workflow is connected */}
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="relative overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-[#F5F0FF] to-white p-5 shadow-sm">
+              <div className="absolute -right-5 -top-8 h-28 w-28 rounded-full bg-violet-200/40 blur-xl" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-xl text-white shadow-md">✦</div>
+                <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Segera hadir</span>
+              </div>
+              <h2 className="relative mt-4 text-base font-extrabold text-slate-900 sm:text-lg">AI Lesson Planner</h2>
+              <p className="relative mt-1 max-w-sm text-xs leading-5 text-slate-600 sm:text-sm">Bantu susun modul ajar dan perangkat pembelajaran berdasarkan kebutuhan kelas.</p>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-br from-[#EAFBFF] to-white p-5 shadow-sm">
+              <div className="absolute -right-5 -top-8 h-28 w-28 rounded-full bg-cyan-200/40 blur-xl" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-600 text-xl text-white shadow-md">✧</div>
+                <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-700">Segera hadir</span>
+              </div>
+              <h2 className="relative mt-4 text-base font-extrabold text-slate-900 sm:text-lg">AI Content Generator</h2>
+              <p className="relative mt-1 max-w-sm text-xs leading-5 text-slate-600 sm:text-sm">Rencana bantuan membuat bahan ajar, aktivitas kelas, dan ide asesmen yang relevan.</p>
+            </div>
+          </section>
+
+          {/* Existing live statistics */}
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { label: 'Rombel Diampu', value: kelasAktif.length, icon: '▦', color: 'bg-blue-600', note: 'Kelas penugasan Anda' },
+              { label: 'Total Siswa', value: siswaDiampu.length, icon: '♙', color: 'bg-emerald-500', note: 'Siswa aktif di rombel' },
+              { label: 'Absensi Belum Lengkap', value: absensiBelumLengkap, icon: '✓', color: 'bg-violet-500', note: 'Rombel perlu dilengkapi' },
+              { label: 'Jurnal Bulan Ini', value: jurnalBulanIni, icon: '▤', color: 'bg-amber-500', note: 'Jurnal yang sudah diisi' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-semibold leading-4 text-slate-500 sm:text-xs">{item.label}</p>
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.color} text-lg font-bold text-white shadow-sm`}>{item.icon}</span>
                 </div>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-600">Hadir</span><b className="text-emerald-600">{absensiHariIni.hadir}</b></div>
-                <div className="flex justify-between"><span className="text-slate-600">Sakit / Izin / Alpa</span><b className="text-amber-600">{absensiHariIni.tidakHadir}</b></div>
-                <div className="flex justify-between"><span className="text-slate-600">Belum diisi</span><b className="text-slate-500">{absensiHariIni.belumDiisi}</b></div>
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 min-h-[220px] flex items-center justify-center text-center text-slate-500 text-sm">Belum ada siswa pada rombel yang ditugaskan kepada Anda.</div>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <h3 className="font-bold text-[#082B62] mb-3">Rombel yang Menjadi Tanggung Jawab Anda</h3>
-        {kelasAktif.length > 0 ? (
-          <div className="flex flex-wrap gap-3">
-            {kelasAktif.map((kelas) => (
-              <div key={kelas.id} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-32">
-                <p className="text-xs text-slate-500">{kelas.jenjang || 'Jenjang'} · Tingkat {kelas.tingkat ?? '-'}</p>
-                <p className="text-2xl font-extrabold text-[#082B62]">{kelas.namaKelas || '-'}</p>
+                <p className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">{loading ? '...' : formatIndonesianNumber(item.value)}</p>
+                <p className="mt-1 text-[10px] text-slate-400 sm:text-xs">{item.note}</p>
               </div>
             ))}
-          </div>
-        ) : <p className="text-sm text-slate-500">Belum ada penugasan rombel untuk akun ini.</p>}
+          </section>
+
+          {/* Existing charts and attendance calculations */}
+          <section className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.85fr)]">
+            <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-5">
+                <h2 className="font-extrabold text-slate-900">Tren Kehadiran Rombel</h2>
+                <p className="mt-1 text-xs text-slate-500">Persentase siswa yang tercatat hadir dalam 7 hari terakhir.</p>
+              </div>
+              {hasTrendData ? (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trend} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+                      <defs><linearGradient id="colorGuruReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#155EEF" stopOpacity={0.28} /><stop offset="95%" stopColor="#155EEF" stopOpacity={0} /></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8EEF6" />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} dy={8} />
+                      <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} unit="%" />
+                      <Tooltip formatter={(value) => value == null ? ['Belum ada data', 'Kehadiran'] : [`${value}%`, 'Kehadiran']} labelFormatter={(_, payload) => payload?.[0]?.payload?.tanggal || ''} contentStyle={{ borderRadius: '12px', border: '1px solid #E2E8F0' }} />
+                      <Area type="monotone" dataKey="hadir" connectNulls={false} stroke="#155EEF" strokeWidth={3} fillOpacity={1} fill="url(#colorGuruReal)" dot={{ fill: '#155EEF', strokeWidth: 2, r: 3, stroke: '#fff' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-slate-500">Belum ada catatan absensi pada rombel Anda dalam 7 hari terakhir.</div>}
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+              <h2 className="font-extrabold text-slate-900">Kehadiran Siswa Hari Ini</h2>
+              <p className="mt-1 text-xs text-slate-500">Ringkasan status kehadiran rombel Anda.</p>
+              {siswaDiampu.length > 0 ? (
+                <>
+                  <div className="relative flex min-h-[210px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height={210}>
+                      <PieChart>
+                        <Pie data={absensiHariIni.pieData} cx="50%" cy="50%" innerRadius={62} outerRadius={86} paddingAngle={1} dataKey="value" stroke="none">
+                          {absensiHariIni.pieData.map((item, index) => <Cell key={item.name} fill={COLORS[index]} />)}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-extrabold text-slate-900">{absensiHariIni.persentaseHadir}%</span>
+                      <span className="mt-1 text-xs font-semibold text-slate-500">Hadir</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-600">Hadir</span><b className="text-emerald-600">{absensiHariIni.hadir}</b></div>
+                    <div className="flex justify-between"><span className="text-slate-600">Sakit / Izin / Alpa</span><b className="text-amber-600">{absensiHariIni.tidakHadir}</b></div>
+                    <div className="flex justify-between"><span className="text-slate-600">Belum diisi</span><b className="text-slate-500">{absensiHariIni.belumDiisi}</b></div>
+                  </div>
+                </>
+              ) : <div className="flex min-h-[240px] items-center justify-center text-center text-sm text-slate-500">Belum ada siswa pada rombel yang ditugaskan kepada Anda.</div>}
+            </div>
+          </section>
+
+          {/* Assigned classes */}
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><h2 className="font-extrabold text-slate-900">Rombel Tanggung Jawab</h2><p className="mt-1 text-xs text-slate-500">Daftar kelas yang terhubung dengan penugasan Anda.</p></div>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{kelasAktif.length} rombel</span>
+            </div>
+            {kelasAktif.length > 0 ? (
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {kelasAktif.map((kelas) => (
+                  <div key={kelas.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-blue-200 hover:bg-blue-50/50">
+                    <p className="text-[10px] font-medium text-slate-500">{kelas.jenjang || 'Jenjang'} · Tingkat {kelas.tingkat ?? '-'}</p>
+                    <p className="mt-1 text-xl font-extrabold text-[#123D83]">{kelas.namaKelas || '-'}</p>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Belum ada penugasan rombel untuk akun ini.</p>}
+          </section>
+
+          {/* Quick links */}
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <h2 className="font-extrabold text-slate-900">Akses Cepat</h2>
+            <p className="mt-1 text-xs text-slate-500">Buka menu yang paling sering digunakan.</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {quickLinks.map((item) => (
+                <Link key={item.title} to={item.to} className="group flex min-w-0 items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg font-bold ${item.tone}`}>{item.icon}</span>
+                  <span className="min-w-0"><b className="block truncate text-xs text-slate-800 sm:text-sm">{item.title}</b><small className="mt-0.5 block text-[10px] leading-4 text-slate-400">{item.detail}</small></span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </main>
+
+        {/* Right rail: calendar and real daily teaching schedule */}
+        <aside className="min-w-0 space-y-5">
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div><h2 className="font-extrabold text-slate-900">Kalender</h2><p className="mt-1 text-xs text-slate-500">Lihat tanggal dan hari berjalan.</p></div>
+              <span className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700">Hari ini</span>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <button type="button" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Bulan sebelumnya">‹</button>
+              <h3 className="text-sm font-bold capitalize text-slate-800">{bulanNama}</h3>
+              <button type="button" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Bulan berikutnya">›</button>
+            </div>
+            <div className="mt-4 grid grid-cols-7 gap-y-2 text-center">
+              {['Sn', 'Sl', 'Rb', 'Km', 'Jm', 'Sb', 'Mg'].map((day) => <span key={day} className="pb-1 text-[10px] font-bold text-slate-400">{day}</span>)}
+              {calendarCells.map((day, index) => {
+                const isToday = day === tanggalHariIni.getDate() && calendarMonth.getMonth() === tanggalHariIni.getMonth() && calendarMonth.getFullYear() === tanggalHariIni.getFullYear();
+                return <span key={`${day ?? 'blank'}-${index}`} className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs ${isToday ? 'bg-blue-600 font-extrabold text-white shadow-md' : day ? 'text-slate-700 hover:bg-slate-100' : 'text-transparent'}`}>{day || '·'}</span>;
+              })}
+            </div>
+            <div className="mt-4 rounded-xl bg-slate-50 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tanggal sekarang</p>
+              <p className="mt-1 text-xs font-bold capitalize text-slate-700">{namaTanggal}</p>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div><h2 className="font-extrabold text-slate-900">Jadwal Hari Ini</h2><p className="mt-1 text-xs capitalize text-slate-500">{namaHariIni}, kegiatan mengajar Anda</p></div>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-lg text-emerald-600">◷</span>
+            </div>
+            {jadwalError ? <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">{jadwalError}</p> : jadwalHariIni.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {jadwalHariIni.map((item) => (
+                  <div key={item.id} className="relative rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex min-w-[58px] flex-col items-center rounded-lg bg-white px-2 py-2 text-center shadow-sm">
+                        <span className="text-xs font-extrabold tabular-nums text-[#123D83]">{item.jamMulai || '--:--'}</span>
+                        <span className="my-1 h-px w-7 bg-slate-200" />
+                        <span className="text-[10px] font-semibold tabular-nums text-slate-500">{item.jamSelesai || '--:--'}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-extrabold leading-5 text-slate-800">{item.mataPelajaran || 'Mata pelajaran'}</p>
+                        <p className="mt-1 text-xs text-slate-500">{item.namaKelas || 'Rombel belum dicantumkan'}</p>
+                        {item.ruang && <p className="mt-1 text-[10px] text-slate-400">Ruang {item.ruang}</p>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <Link to="/guru/jadwal" className="block rounded-xl border border-blue-100 px-3 py-2.5 text-center text-xs font-bold text-blue-700 transition hover:bg-blue-50">Lihat semua jadwal</Link>
+              </div>
+            ) : <div className="mt-4 rounded-xl bg-slate-50 px-4 py-8 text-center"><span className="text-2xl text-slate-300">◷</span><p className="mt-2 text-sm font-bold text-slate-700">Tidak ada jadwal hari ini</p><p className="mt-1 text-xs leading-5 text-slate-500">Jika seharusnya ada jadwal, pastikan penugasan Guru dan tahun ajaran sudah sesuai.</p></div>}
+          </section>
+
+          <section className="rounded-2xl bg-gradient-to-br from-[#123D83] to-[#155EEF] p-5 text-white shadow-lg">
+            <p className="text-xs font-semibold text-blue-100">Pengingat</p>
+            <h2 className="mt-1 text-lg font-extrabold">Tetap terorganisasi</h2>
+            <p className="mt-2 text-xs leading-5 text-blue-100">Periksa jadwal, lengkapi absensi siswa, dan isi jurnal mengajar agar catatan pembelajaran selalu diperbarui.</p>
+          </section>
+        </aside>
       </div>
-      <p className="text-xs text-slate-400">Data dihitung dari penugasan ID guru dan data Firestore. Tanggal hari ini: {today}.</p>
+      <p className="text-center text-[10px] text-slate-400">Data dashboard diperbarui dari Firestore. Tanggal hari ini: {today}.</p>
     </div>
   );
 }

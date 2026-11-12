@@ -1,3 +1,4 @@
+
 import {
   createContext,
   useContext,
@@ -9,10 +10,18 @@ import {
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
-import { doc, onSnapshot } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  where
+} from 'firebase/firestore';
+
 import { auth, db } from '../lib/firebase';
 
 type RoleType = 'admin' | 'guru' | 'kepsek';
+type JenisKelamin = 'Laki-laki' | 'Perempuan' | null;
 
 interface UserData {
   uid: string;
@@ -20,6 +29,7 @@ interface UserData {
   nama: string;
   role: RoleType;
   guruId: string | null;
+  jenisKelamin: JenisKelamin;
   aktif: boolean;
 }
 
@@ -35,24 +45,35 @@ const AuthContext = createContext<AuthContextType>({
   loading: true
 });
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider = ({
+  children
+}: {
+  children: ReactNode;
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unsubscribeProfil: (() => void) | null = null;
+    let unsubscribePegawai: (() => void) | null = null;
+
     let uidYangSedangDipantau: string | null = null;
     let masihTerpasang = true;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      // Hentikan listener profil sebelumnya saat akun berubah atau logout.
       if (unsubscribeProfil) {
         unsubscribeProfil();
         unsubscribeProfil = null;
       }
 
+      if (unsubscribePegawai) {
+        unsubscribePegawai();
+        unsubscribePegawai = null;
+      }
+
       uidYangSedangDipantau = currentUser?.uid ?? null;
+
       setUser(currentUser);
       setUserData(null);
       setLoading(true);
@@ -64,11 +85,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const profilRef = doc(db, 'users', currentUser.uid);
 
-      // Pantau profil dan status akun secara real-time.
       unsubscribeProfil = onSnapshot(
         profilRef,
         (docSnap) => {
-          // Abaikan respons lama jika pengguna sudah berganti akun.
           if (
             !masihTerpasang ||
             uidYangSedangDipantau !== currentUser.uid
@@ -86,16 +105,181 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const data = docSnap.data();
           const role = data.role as RoleType;
 
-          setUserData({
+          const guruId =
+            typeof data.guruId === 'string' &&
+            data.guruId.trim() !== ''
+              ? data.guruId
+              : null;
+
+          const profilDasar: UserData = {
             uid: currentUser.uid,
             email: currentUser.email,
             nama: typeof data.nama === 'string' ? data.nama : '',
             role,
-            guruId: typeof data.guruId === 'string' ? data.guruId : null,
-            // Akun lama tanpa field "aktif" tetap dianggap aktif.
+            guruId,
+            jenisKelamin: null,
             aktif: typeof data.aktif === 'boolean' ? data.aktif : true
-          });
+          };
 
+          if (unsubscribePegawai) {
+            unsubscribePegawai();
+            unsubscribePegawai = null;
+          }
+
+          setUserData(profilDasar);
+
+          // =========================================
+          // GURU: Tetap menggunakan guruId seperti sebelumnya
+          // =========================================
+
+          if (role === 'guru' && guruId) {
+            const guruRef = doc(db, 'guru', guruId);
+
+            unsubscribePegawai = onSnapshot(
+              guruRef,
+              (guruSnap) => {
+                if (
+                  !masihTerpasang ||
+                  uidYangSedangDipantau !== currentUser.uid
+                ) {
+                  return;
+                }
+
+                const dataGuru = guruSnap.exists()
+                  ? guruSnap.data()
+                  : null;
+
+                const nilaiJenisKelamin = dataGuru?.jenisKelamin;
+
+                const jenisKelamin: JenisKelamin =
+                  nilaiJenisKelamin === 'Laki-laki' ||
+                  nilaiJenisKelamin === 'Perempuan'
+                    ? nilaiJenisKelamin
+                    : null;
+
+                setUserData((sebelumnya) => {
+                  if (
+                    !sebelumnya ||
+                    sebelumnya.uid !== currentUser.uid
+                  ) {
+                    return sebelumnya;
+                  }
+
+                  return {
+                    ...sebelumnya,
+                    jenisKelamin
+                  };
+                });
+
+                setLoading(false);
+              },
+              (error) => {
+                console.error(
+                  'Gagal membaca data pegawai Guru:',
+                  error
+                );
+
+                if (
+                  masihTerpasang &&
+                  uidYangSedangDipantau === currentUser.uid
+                ) {
+                  setLoading(false);
+                }
+              }
+            );
+
+            return;
+          }
+
+          // =========================================
+          // KEPSEK: Cari data pegawai berdasarkan jabatan
+          // =========================================
+
+          if (role === 'kepsek') {
+            const pegawaiKepsekQuery = query(
+              collection(db, 'guru'),
+              where('jabatan', '==', 'Kepala Sekolah')
+            );
+
+            unsubscribePegawai = onSnapshot(
+              pegawaiKepsekQuery,
+              (pegawaiSnap) => {
+                if (
+                  !masihTerpasang ||
+                  uidYangSedangDipantau !== currentUser.uid
+                ) {
+                  return;
+                }
+
+                // Hanya gunakan data jika ditemukan tepat satu
+                // pegawai dengan jabatan Kepala Sekolah.
+                if (pegawaiSnap.size !== 1) {
+                  console.warn(
+                    'Data Kepala Sekolah tidak tunggal. Jenis kelamin tidak dapat ditentukan otomatis.'
+                  );
+
+                  setUserData((sebelumnya) => {
+                    if (
+                      !sebelumnya ||
+                      sebelumnya.uid !== currentUser.uid
+                    ) {
+                      return sebelumnya;
+                    }
+
+                    return {
+                      ...sebelumnya,
+                      jenisKelamin: null
+                    };
+                  });
+
+                  setLoading(false);
+                  return;
+                }
+
+                const dataPegawai = pegawaiSnap.docs[0].data();
+                const nilaiJenisKelamin = dataPegawai.jenisKelamin;
+
+                const jenisKelamin: JenisKelamin =
+                  nilaiJenisKelamin === 'Laki-laki' ||
+                  nilaiJenisKelamin === 'Perempuan'
+                    ? nilaiJenisKelamin
+                    : null;
+
+                setUserData((sebelumnya) => {
+                  if (
+                    !sebelumnya ||
+                    sebelumnya.uid !== currentUser.uid
+                  ) {
+                    return sebelumnya;
+                  }
+
+                  return {
+                    ...sebelumnya,
+                    jenisKelamin
+                  };
+                });
+
+                setLoading(false);
+              },
+              (error) => {
+                console.error(
+                  'Gagal membaca data pegawai Kepala Sekolah:',
+                  error
+                );
+
+                if (
+                  masihTerpasang &&
+                  uidYangSedangDipantau === currentUser.uid
+                ) {
+                  setLoading(false);
+                }
+              }
+            );
+
+            return;
+          }
+
+          // Admin tidak membutuhkan data jenis kelamin.
           setLoading(false);
         },
         (error) => {
@@ -116,16 +300,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       masihTerpasang = false;
       uidYangSedangDipantau = null;
+
       unsubscribeAuth();
+
       if (unsubscribeProfil) {
         unsubscribeProfil();
         unsubscribeProfil = null;
+      }
+
+      if (unsubscribePegawai) {
+        unsubscribePegawai();
+        unsubscribePegawai = null;
       }
     };
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading }}>
+    <AuthContext.Provider
+      value={{ user, userData, loading }}
+    >
       {children}
     </AuthContext.Provider>
   );
