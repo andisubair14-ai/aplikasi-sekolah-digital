@@ -33,6 +33,7 @@ import PenilaianSiswa from './pages/PenilaianSiswa';
 import RekapKehadiran from './pages/RekapKehadiran';
 import ProfilGuru from './pages/ProfilGuru';
 import ProfilKepsek from './pages/ProfilKepsek';
+import RuangKerjaGuru from './pages/RuangKerjaGuru';
 
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-64 bg-white rounded-2xl border border-slate-200">
@@ -77,7 +78,20 @@ function App() {
           <Route path="/guru" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/guru/dashboard" replace />} />
             <Route path="dashboard" element={<GuruDashboard />} />
-            <Route path="kelas-diampu" element={<Placeholder title="Kelas yang Diampu" />} />
+            <Route
+  path="kelas-diampu"
+  element={<Navigate to="/guru/ruang-kerja-guru" replace />}
+/>
+
+<Route path="ruang-kerja-guru" element={<RuangKerjaGuru />} />
+
+{/* Enam submenu Ruang Kerja Guru */}
+<Route path="ruang-kerja-guru/modul-ajar" element={<Placeholder title="Modul Ajar" />} />
+<Route path="ruang-kerja-guru/media-ajar" element={<Placeholder title="Media Ajar" />} />
+<Route path="ruang-kerja-guru/perangkat-pembelajaran" element={<Placeholder title="Perangkat Pembelajaran" />} />
+<Route path="ruang-kerja-guru/asesmen-evaluasi" element={<Placeholder title="Asesmen dan Evaluasi" />} />
+<Route path="ruang-kerja-guru/bank-soal" element={<Placeholder title="Bank Soal dan Materi" />} />
+<Route path="ruang-kerja-guru/jurnal-refleksi" element={<Placeholder title="Jurnal dan Refleksi Guru" />} />
             <Route path="siswa" element={<DataSiswa />} />
             <Route path="absensi" element={<Absensi />} />
             <Route path="absensi-guru" element={<AbsensiGuru />} />
