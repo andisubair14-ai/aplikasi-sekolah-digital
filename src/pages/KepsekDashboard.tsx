@@ -215,7 +215,6 @@ export default function KepsekDashboard() {
   ];
   while (calendarCells.length % 7 !== 0) calendarCells.push(null);
 
-  const cardClass = 'min-w-[160px] max-w-[180px] shrink-0 snap-start bg-white rounded-2xl p-4 shadow-sm border border-slate-100/90 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:max-w-none sm:shrink sm:p-5';
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 pb-10">
