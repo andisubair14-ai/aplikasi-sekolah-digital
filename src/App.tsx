@@ -34,6 +34,7 @@ import RekapKehadiran from './pages/RekapKehadiran';
 import ProfilGuru from './pages/ProfilGuru';
 import ProfilKepsek from './pages/ProfilKepsek';
 import RuangKerjaGuru from './pages/RuangKerjaGuru';
+import ModulAjar from './pages/ModulAjar';
 
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-64 bg-white rounded-2xl border border-slate-200">
@@ -86,7 +87,7 @@ function App() {
 <Route path="ruang-kerja-guru" element={<RuangKerjaGuru />} />
 
 {/* Enam submenu Ruang Kerja Guru */}
-<Route path="ruang-kerja-guru/modul-ajar" element={<Placeholder title="Modul Ajar" />} />
+<Route path="ruang-kerja-guru/modul-ajar" element={<ModulAjar />} />
 <Route path="ruang-kerja-guru/media-ajar" element={<Placeholder title="Media Ajar" />} />
 <Route path="ruang-kerja-guru/perangkat-pembelajaran" element={<Placeholder title="Perangkat Pembelajaran" />} />
 <Route path="ruang-kerja-guru/asesmen-evaluasi" element={<Placeholder title="Asesmen dan Evaluasi" />} />
