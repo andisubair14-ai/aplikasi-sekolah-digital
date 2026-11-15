@@ -6,12 +6,12 @@ import {
   serverTimestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { buatModulDenganAI } from '../utils/geminiModulAjar';
 import { useAuth } from '../contexts/AuthContext';
 import { adaptModulAjarToV2, buatModulAjarKosongV2 } from '../utils/modulAjarAdapter';
 import type { ModulAjarV2 } from '../types/modulAjar';
 
 type R = Record<string, any>;
-const green = '#1e3a8a';
 const input = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1.5 block text-sm font-semibold text-slate-700';
 const uid = () => `item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -62,11 +62,6 @@ function Section({ n, title, desc, children }: SectionProps) {
     <div className="grid gap-4 p-5 md:grid-cols-2">{children}</div>
   </section>;
 }
-function PrintField({ title, value }: { title: string; value: unknown }) {
-  if (Array.isArray(value)) value = value.join(', ');
-  if (value === undefined || value === null || String(value).trim() === '') return null;
-  return <div className="mb-3 break-inside-avoid"><div className="text-xs font-bold uppercase text-slate-500">{title}</div><div className="mt-1 whitespace-pre-wrap text-sm">{String(value)}</div></div>;
-}
 
 export default function ModulAjar() {
   const navigate = useNavigate();
@@ -80,8 +75,24 @@ export default function ModulAjar() {
   const [legacyMode, setLegacyMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
+  const [generatingAI, setGeneratingAI] = useState(false);
+  const [, setMessage] = useState('');
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Identitas resmi sekolah dibaca langsung dari Pengaturan Firestore.
+  const [schoolSettings, setSchoolSettings] = useState<R>({});
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      doc(db, 'pengaturan', 'sekolah'),
+      snap => setSchoolSettings(snap.exists() ? snap.data() as R : {}),
+      err => {
+        console.error('Gagal memuat identitas sekolah dari Pengaturan:', err);
+        setSchoolSettings({});
+      }
+    );
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
@@ -111,11 +122,63 @@ export default function ModulAjar() {
     const v = adaptModulAjarToV2(row as any);
     setData({ ...v, userId, guruId, namaGuru });
     setEditId(row.id); setLegacyMode(row.versiStruktur !== 2);
-    setMessage(row.versiStruktur === 2
-      ? `Sedang mengedit: ${v.identitas.judulModul || 'Modul tanpa judul'}`
-      : 'Modul lama dibuka. Saat disimpan, sistem membuat dokumen V2 baru; dokumen lama tidak ditimpa.');
+    setOpeningId(row.id);
     setError(''); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const generateWithAI = async () => {
+  if (
+    !data.identitas.jenjang ||
+    !data.identitas.kelas ||
+    !data.identitas.mataPelajaran ||
+    !data.identitas.topik
+  ) {
+    setError(
+      'Lengkapi Jenjang, Kelas, Mata Pelajaran, dan Topik terlebih dahulu.'
+    );
+    return;
+  }
+
+  if (
+    !window.confirm(
+      'AI akan menyusun isi pembelajaran. Isi bagian pembelajaran yang sudah ada akan diganti. Lanjutkan?'
+    )
+  ) return;
+
+  setGeneratingAI(true);
+  setError('');
+  setMessage('');
+
+  try {
+    const hasil = await buatModulDenganAI(data.identitas);
+
+    setData(old => ({
+      ...old,
+      ...hasil,
+      userId,
+      guruId,
+      namaGuru,
+      identitas: old.identitas,
+      lampiranList: old.lampiranList,
+      refleksi: old.refleksi,
+      pengesahan: old.pengesahan,
+      legacyData: old.legacyData,
+    }));
+
+    setMessage(
+      'Modul Ajar berhasil disusun oleh AI. Silakan periksa dan edit setiap bagian.'
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) {
+    console.error('Gagal membuat Modul Ajar dengan AI:', e);
+    setError(
+      e instanceof Error
+        ? e.message
+        : 'AI gagal menyusun Modul Ajar. Silakan coba kembali.'
+    );
+  } finally {
+    setGeneratingAI(false);
+  }
+};
   const save = async () => {
     if (!userId || !guruId) { setError('Identitas akun Guru belum lengkap. Silakan masuk kembali.'); return; }
     if (!data.identitas.judulModul.trim()) { setError('Judul Modul Ajar wajib diisi.'); return; }
@@ -129,6 +192,7 @@ export default function ModulAjar() {
         kerangkaPembelajaranMendalam: data.kerangkaPembelajaranMendalam,
         langkahPembelajaran: data.langkahPembelajaran,
         pertemuanList: data.pertemuanList, asesmenList: data.asesmenList,
+        instrumenPenilaian: (data as any).instrumenPenilaian || {},
         rubrikList: data.rubrikList, pengayaanRemedial: data.pengayaanRemedial,
         mediaList: data.mediaList, sumberBelajarList: data.sumberBelajarList,
         lkpdList: data.lkpdList, lampiranList: data.lampiranList,
@@ -169,19 +233,47 @@ export default function ModulAjar() {
     ['identifikasiPesertaDidik','kondisiKelas','Kondisi Kelas','02','textarea'],
     ['identifikasiPesertaDidik','karakteristikMateri','Karakteristik Materi','02','textarea'],
   ];
-  const printGroups: [string, [string, any][]][] = [
-    ['01. Identitas Modul', Object.entries(data.identitas)],
-    ['02. Identifikasi Peserta Didik', Object.entries(data.identifikasiPesertaDidik)],
-    ['03. Desain Pembelajaran', Object.entries(data.desainPembelajaran).filter(([k]) => k !== 'tujuanPembelajaran')],
-    ['04. Kerangka Pembelajaran Mendalam', Object.entries(data.kerangkaPembelajaranMendalam)],
-    ['05. Langkah-Langkah Pembelajaran', Object.entries(data.langkahPembelajaran)],
-    ['08. Pengayaan dan Remedial', Object.entries(data.pengayaanRemedial)],
-    ['11. Refleksi Pembelajaran', Object.entries(data.refleksi)],
-    ['12. Pengesahan', Object.entries(data.pengesahan)],
-  ];
+  
 
   return <div className="mx-auto max-w-7xl space-y-6 pb-12">
-    <style>{`@page{size:A4;margin:15mm}@media print{body{background:#fff!important}body *{visibility:hidden!important}.print-doc,.print-doc *{visibility:visible!important}.print-doc{display:block!important;position:absolute!important;left:0;top:0;width:100%;color:#17212b!important}.no-print{display:none!important}.avoid-break{break-inside:avoid;page-break-inside:avoid}}`}</style>
+    <style>{`
+      @page { size: A4 portrait; margin: 5mm 12mm 17mm;
+        @bottom-center { content: "RPM - Modul Ajar | Halaman " counter(page) " dari " counter(pages); font: 8pt Arial; color: #334155; border-top: 1px solid #1e3a8a; padding-top: 3mm; }
+      }
+      @keyframes modul-open-feedback { 0%{transform:scale(1)} 35%{transform:scale(1.07);box-shadow:0 0 0 5px rgba(37,99,235,.2)} 70%{transform:scale(.97)} 100%{transform:scale(1)} }
+      .modul-open-feedback { animation: modul-open-feedback .65s ease-out 1; }
+      @media print {
+        html,body,#root{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;background:#fff!important}
+        /* Lepaskan pembungkus dashboard/sidebar yang biasanya memakai h-screen dan overflow-y-auto/hidden. */
+        body *{max-height:none!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+        #root,#root>div,#root>div>div,main,main>div{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+        body *{visibility:hidden!important}.print-doc,.print-doc *{visibility:visible!important}
+        .print-doc{display:block!important;position:static!important;width:100%!important;height:auto!important;max-height:none!important;overflow:visible!important;color:#17212b!important;font:9pt/1.35 Arial,Helvetica,sans-serif!important;break-inside:auto!important;page-break-inside:auto!important}
+        .no-print{display:none!important}
+        .rpm-title{color:#10245f!important;font-size:11pt!important;font-weight:800!important;margin:13px 0 6px!important;break-after:avoid!important;page-break-after:avoid!important}
+        .rpm-subtitle{color:#10245f!important;font-size:9.5pt!important;font-weight:800!important;margin:9px 0 5px!important;break-after:avoid!important;page-break-after:avoid!important}
+        .rpm-table{width:100%!important;border-collapse:collapse!important;margin:5px 0 10px!important;font-size:8.4pt!important}
+        .rpm-table thead{display:table-header-group!important}.rpm-table tfoot{display:table-footer-group!important}
+        .rpm-table th,.rpm-table td{border:1px solid #64748b!important;padding:4px 5px!important;vertical-align:top!important;overflow-wrap:anywhere!important}
+        .rpm-table tr{break-inside:avoid!important;page-break-inside:avoid!important}
+        .rpm-table th{background:#1f4e79!important;color:#fff!important;text-align:center!important;font-weight:700!important}
+        .rpm-label{background:#d9e1f2!important;font-weight:700!important}
+        .rpm-green th{background:#548235!important;color:#fff!important}
+        .rpm-highlight{border:1px solid #bf8f00!important;background:#fff2cc!important;padding:8px!important;margin:8px 0!important;break-inside:avoid!important}
+        .rpm-kop{display:grid!important;grid-template-columns:76px minmax(0,1fr) 76px!important;align-items:center!important;column-gap:12px!important;border-bottom:3px double #111!important;padding-bottom:6px!important;margin-bottom:8px!important;break-inside:avoid!important}
+        .rpm-logo,.rpm-logo-right{width:76px!important;height:76px!important;border:0!important;border-radius:0!important;background:transparent!important;display:flex!important;align-items:center!important;justify-content:center!important;font-weight:700!important;overflow:visible!important}
+        .rpm-logo img,.rpm-logo-right img{display:block!important;width:100%!important;height:100%!important;max-width:76px!important;max-height:76px!important;object-fit:contain!important;padding:0!important;border:0!important;border-radius:0!important}
+        .rpm-kop-text{min-width:0!important;text-align:center!important;line-height:1.2!important}
+        .rpm-sign{display:grid!important;grid-template-columns:1fr 1fr!important;gap:12mm!important;margin-top:22px!important;text-align:center!important;break-inside:avoid!important;page-break-inside:avoid!important}
+        .rpm-sign-space{height:58px!important}.rpm-body{white-space:pre-wrap!important;overflow-wrap:anywhere!important}
+        .rpm-activity-list{display:block!important;width:100%!important;margin:7px 0 12px!important}
+        .rpm-activity{display:block!important;width:100%!important;margin:0 0 9px!important;border:1px solid #94a3b8!important;break-inside:auto!important;page-break-inside:auto!important}
+        .rpm-activity-heading{display:block!important;margin:0!important;padding:6px 8px!important;background:#d9e1f2!important;color:#10245f!important;font-size:9pt!important;font-weight:800!important;border-bottom:1px solid #94a3b8!important;break-after:avoid!important;page-break-after:avoid!important}
+        .rpm-activity-content{display:block!important;padding:7px 9px!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important;line-height:1.45!important}
+        .rpm-activity-content p{margin:0 0 4px!important}
+        p{orphans:3!important;widows:3!important}
+      }
+    `}</style>
 
     <div className="no-print flex flex-wrap items-center justify-between gap-3">
       <button onClick={() => navigate('/guru/ruang-kerja-guru')} className="rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">← Kembali ke Ruang Kerja Guru</button>
@@ -200,10 +292,30 @@ export default function ModulAjar() {
       <b>Petunjuk:</b> Isi bagian yang diperlukan. Data lama tetap dipertahankan. Jika modul lama dibuka lalu disimpan, sistem membuat dokumen V2 baru dan tidak menimpa dokumen lama.
     </div>
     {error && <div className="no-print rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-    {message && <div className="no-print rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">{message}</div>}
-
     <div className="no-print space-y-5">
       <Section n="01" title="Identitas Modul" desc="Informasi sekolah, penyusun, jenjang, kelas, dan mata pelajaran.">
+        <div className="sm:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
+  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <p className="font-bold text-blue-900">
+        Asisten AI Penyusun Modul Ajar
+      </p>
+      <p className="mt-1 text-xs text-blue-700">
+        Isi identitas modul terlebih dahulu, kemudian gunakan fitur AI
+        membantu menyusun seluruh bagian pembelajaran.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      onClick={generateWithAI}
+      disabled={generatingAI}
+      className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {generatingAI ? 'Sedang Menyusun...' : '✨ Buat Modul dengan AI'}
+    </button>
+  </div>
+</div>
         <TextField title="Judul Modul Ajar" value={data.identitas.judulModul} change={v=>nested('identitas','judulModul',v)} wide />
         <TextField title="Nama Sekolah" value={data.identitas.namaSekolah} change={v=>nested('identitas','namaSekolah',v)} />
         <TextField title="Nama Penyusun" value={data.identitas.namaPenyusun} change={v=>nested('identitas','namaPenyusun',v)} />
@@ -330,17 +442,193 @@ export default function ModulAjar() {
 
     <div className="no-print rounded-2xl border bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-bold">Modul Ajar Tersimpan</h2><p className="text-xs text-slate-500">Dokumen milik akun Guru ini.</p></div><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">{records.length} modul</span></div>
-      {loading?<p className="py-5 text-center text-sm text-slate-500">Memuat...</p>:records.length===0?<p className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-500">Belum ada modul tersimpan.</p>:<div className="space-y-3">{records.map(row=>{const title=row.identitas?.judulModul||row.judulModul||'Modul tanpa judul';const v2=row.versiStruktur===2;return <div key={row.id} className="flex flex-col justify-between gap-3 rounded-xl border p-4 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><b>{title}</b><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${v2?'bg-blue-100 text-blue-800':'bg-amber-100 text-amber-800'}`}>{v2?'V2':'VERSI LAMA'}</span></div><p className="mt-1 text-xs text-slate-500">{row.identitas?.jenjang||row.jenjang||'—'} • {row.identitas?.kelas||row.kelas||'Kelas belum diisi'} • {row.identitas?.mataPelajaran||row.mataPelajaran||''}</p></div><div className="flex gap-2"><button onClick={()=>open(row)} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">Buka</button><button onClick={()=>removeRecord(row)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600">Hapus</button></div></div>})}</div>}
+      {loading?<p className="py-5 text-center text-sm text-slate-500">Memuat...</p>:records.length===0?<p className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-500">Belum ada modul tersimpan.</p>:<div className="space-y-3">{records.map(row=>{const title=row.identitas?.judulModul||row.judulModul||'Modul tanpa judul';const v2=row.versiStruktur===2;return <div key={row.id} className="flex flex-col justify-between gap-3 rounded-xl border p-4 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><b>{title}</b><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${v2?'bg-blue-100 text-blue-800':'bg-amber-100 text-amber-800'}`}>{v2?'V2':'VERSI LAMA'}</span></div><p className="mt-1 text-xs text-slate-500">{row.identitas?.jenjang||row.jenjang||'—'} • {row.identitas?.kelas||row.kelas||'Kelas belum diisi'} • {row.identitas?.mataPelajaran||row.mataPelajaran||''}</p></div><div className="flex gap-2"><button
+          onClick={() => open(row)}
+          onAnimationEnd={() => setOpeningId(current => current === row.id ? null : current)}
+          className={`rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 ${openingId === row.id ? 'modul-open-feedback' : ''}`}
+        >Buka</button><button onClick={()=>removeRecord(row)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600">Hapus</button></div></div>})}</div>}
     </div>
 
     <div className="print-doc hidden bg-white text-slate-900">
-      <header className="mb-6 border-b-2 border-blue-800 pb-4 text-center"><p className="text-xs font-bold uppercase">{data.identitas.namaSekolah||'Nama Sekolah'}</p><h1 className="mt-2 text-2xl font-bold" style={{color:green}}>MODUL AJAR</h1><p>{data.identitas.judulModul}</p></header>
-      {printGroups.map(([title,fields])=><section key={title} className="mb-6"><h2 className="mb-3 border-b border-blue-700 pb-2 font-bold" style={{color:green}}>{title}</h2><div className="grid grid-cols-2 gap-x-6">{fields.map(([k,v])=><PrintField key={k} title={k} value={v}/>)}</div></section>)}
-      {data.pertemuanList.length>0&&<section className="mb-6"><h2 className="mb-3 border-b pb-2 font-bold">06. Rencana Kegiatan per Pertemuan</h2>{data.pertemuanList.map((x:any,i:number)=><div key={x.id||i} className="avoid-break mb-4"><b>Pertemuan {i+1}: {x.judul}</b>{Object.entries(x).filter(([k])=>!['id','judul'].includes(k)).map(([k,v])=><PrintField key={k} title={k} value={v}/>)}</div>)}</section>}
-      {data.asesmenList.length>0&&<section className="mb-6"><h2 className="mb-3 border-b pb-2 font-bold">07. Asesmen dan Evaluasi</h2>{data.asesmenList.map((x:any,i:number)=><div key={x.id||i} className="avoid-break mb-4"><b>{x.judul} ({x.jenis})</b>{Object.entries(x).filter(([k])=>!['id','judul','jenis','butirSoalList'].includes(k)).map(([k,v])=><PrintField key={k} title={k} value={v}/>) }{(x.butirSoalList||[]).map((s:any,j:number)=><div key={s.id||j} className="ml-4 border-l pl-3"><PrintField title={`Soal ${j+1}`} value={s.pertanyaan}/><PrintField title="Kunci Jawaban" value={s.kunciJawaban}/><PrintField title="Skor" value={s.skor}/></div>)}</div>)}</section>}
-      {data.lkpdList.length>0&&<section className="mb-6"><h2 className="mb-3 border-b pb-2 font-bold">10. LKPD</h2>{data.lkpdList.map((x:any,i:number)=><div key={x.id||i} className="avoid-break mb-4"><b>{x.judul||`LKPD ${i+1}`}</b>{Object.entries(x).filter(([k])=>!['id','judul'].includes(k)).map(([k,v])=><PrintField key={k} title={k} value={v}/>)}</div>)}</section>}
-      {data.lampiranList.length>0&&<section className="mb-6"><h2 className="mb-3 border-b pb-2 font-bold">Lampiran Tambahan</h2>{data.lampiranList.map((x:any,i:number)=><div key={x.id||i} className="avoid-break mb-4"><b>{x.judul||`Lampiran ${i+1}`}</b><PrintField title="Jenis" value={x.jenis}/><PrintField title="Isi" value={x.deskripsi}/><PrintField title="File" value={x.namaFile}/><PrintField title="URL" value={x.fileUrl}/></div>)}</section>}
-      <section className="mt-10 grid grid-cols-2 gap-12 text-center text-sm"><div><p>{data.pengesahan.tempat}, {data.pengesahan.tanggal}</p><p>Mengetahui, Kepala Sekolah</p><div className="h-20"/><b className="underline">{data.pengesahan.namaKepalaSekolah}</b><p>NIP. {data.pengesahan.nipKepalaSekolah}</p></div><div><p>&nbsp;</p><p>Penyusun Modul Ajar</p><div className="h-20"/><b className="underline">{data.pengesahan.namaPenyusun||namaGuru}</b><p>NIP. {data.pengesahan.nipPenyusun||data.identitas.nipPenyusun}</p></div></section>
+      <header className="rpm-kop">
+        <div className="rpm-logo">
+          {schoolSettings.logoPemerintahUrl
+            ? <img src={schoolSettings.logoPemerintahUrl} alt="Logo Pemerintah" />
+            : 'LOGO'}
+        </div>
+        <div className="rpm-kop-text">
+          <h2 className="text-sm font-extrabold uppercase">
+            {schoolSettings.namaPemerintah || (data.identitas as any).namaPemerintah || 'PEMERINTAH KABUPATEN / KOTA'}
+          </h2>
+          <p className="text-xs font-bold uppercase">
+            {schoolSettings.namaDinas || (data.identitas as any).namaDinas || 'DINAS PENDIDIKAN'}
+          </p>
+          <h2 className="text-base font-extrabold uppercase">
+            {schoolSettings.namaSekolah || data.identitas.namaSekolah || 'NAMA SEKOLAH'}
+          </h2>
+          <p className="text-[9px]">
+            {schoolSettings.alamat || (data.identitas as any).alamatSekolah || ''}
+          </p>
+        </div>
+        <div className="rpm-logo-right">
+          <img src="/tut-wuri-handayani.png" alt="Lambang Tut Wuri Handayani" />
+        </div>
+      </header>
+      <div className="mb-3 text-center">
+        <h1 className="text-base font-extrabold text-blue-950">RENCANA PEMBELAJARAN MENDALAM (RPM)</h1>
+        <h2 className="text-sm font-bold text-blue-900">MODUL AJAR</h2>
+        <p className="text-xs font-bold text-blue-900">FASE {data.identitas.fase || '-'} — KELAS {data.identitas.kelas || '-'}</p>
+      </div>
+
+      <h3 className="rpm-title">IDENTITAS MODUL</h3>
+      <table className="rpm-table"><tbody>
+        {[
+          ['Sekolah/Madrasah',data.identitas.namaSekolah,'Mata Pelajaran',data.identitas.mataPelajaran],
+          ['Topik',data.identitas.topik,'Fase/Kelas',`${data.identitas.fase || '-'} / ${data.identitas.kelas || '-'}`],
+          ['Alokasi Waktu',data.identitas.alokasiWaktu,'Tahun Pelajaran',data.identitas.tahunAjaran],
+          ['Tujuan Pembelajaran',data.desainPembelajaran.tp,'Semester',data.identitas.semester],
+          ['Nama Penyusun',data.identitas.namaPenyusun || namaGuru,'NIP',data.identitas.nipPenyusun],
+          ['Jumlah Siswa',data.identitas.jumlahSiswa,'Jenjang',data.identitas.jenjang],
+        ].map((r,i)=><tr key={i}><td className="rpm-label" style={{width:'20%'}}>{r[0]}</td><td style={{width:'30%'}}>{r[1] || '-'}</td><td className="rpm-label" style={{width:'20%'}}>{r[2]}</td><td style={{width:'30%'}}>{r[3] || '-'}</td></tr>)}
+      </tbody></table>
+
+      <h3 className="rpm-title">A. IDENTIFIKASI</h3>
+      <table className="rpm-table"><thead><tr><th>Komponen</th><th>Deskripsi</th></tr></thead><tbody>
+        <tr><td className="rpm-label">Identifikasi Peserta Didik</td><td>
+          <p><b>Jumlah Siswa:</b> {data.identitas.jumlahSiswa || '-'}</p>
+          <p><b>Kesiapan Belajar:</b> {data.identifikasiPesertaDidik.kesiapanMurid || '-'}</p>
+          <p><b>Pengetahuan Awal:</b> {data.identifikasiPesertaDidik.pengetahuanAwal || '-'}</p>
+          <p><b>Minat:</b> {(data.identifikasiPesertaDidik as any).minatMurid || '-'}</p>
+          <p><b>Latar Belakang:</b> {(data.identifikasiPesertaDidik as any).latarBelakangMurid || '-'}</p>
+          <p><b>Kebutuhan Belajar:</b> {data.identifikasiPesertaDidik.kebutuhanBelajar || '-'}</p>
+          <p><b>Kondisi Kelas:</b> {data.identifikasiPesertaDidik.kondisiKelas || '-'}</p>
+        </td></tr>
+        <tr><td className="rpm-label">Materi Pelajaran</td><td>{data.identifikasiPesertaDidik.karakteristikMateri || '-'}</td></tr>
+        <tr><td className="rpm-label">Dimensi Profil Lulusan</td><td>{data.kerangkaPembelajaranMendalam.dimensiProfil.map((v,i)=><p key={i}>{i+1}. {v}</p>)}</td></tr>
+      </tbody></table>
+
+      <h3 className="rpm-title">B. DESAIN PEMBELAJARAN</h3>
+      <table className="rpm-table"><thead><tr><th>Komponen</th><th>Deskripsi</th></tr></thead><tbody>
+        {[
+          ['Capaian Pembelajaran',data.desainPembelajaran.cp],
+          ['Lintas Disiplin Ilmu',(data.desainPembelajaran as any).lintasDisiplinIlmu],
+          ['Tujuan Pembelajaran',data.desainPembelajaran.tp],
+          ['Indikator Pencapaian',(data.desainPembelajaran as any).indikatorPencapaian],
+          ['Topik Pembelajaran',(data.desainPembelajaran as any).topikPembelajaran || data.desainPembelajaran.materiPokok],
+          ['Model Pembelajaran',data.desainPembelajaran.modelPembelajaran],
+          ['Pendekatan Pembelajaran',data.desainPembelajaran.pendekatanPembelajaran],
+          ['Metode Pembelajaran',data.desainPembelajaran.metodePembelajaran],
+        ].filter(([,v])=>v).map(([k,v],i)=><tr key={i}><td className="rpm-label">{k}</td><td className="rpm-body">{v}</td></tr>)}
+      </tbody></table>
+      {data.desainPembelajaran.pertanyaanPemantik && <div className="rpm-highlight"><b>Pertanyaan Pemantik:</b><p className="rpm-body italic">{data.desainPembelajaran.pertanyaanPemantik}</p></div>}
+
+      <h3 className="rpm-title">C. KERANGKA PEMBELAJARAN MENDALAM</h3>
+      <table className="rpm-table rpm-green"><thead><tr><th>Prinsip Pembelajaran</th><th>Wujud dalam Pembelajaran</th><th>Indikator Capaian</th></tr></thead><tbody>
+        {data.kerangkaPembelajaranMendalam.prinsipPembelajaran.map((v,i)=><tr key={i}><td className="rpm-label">{v}</td><td>{data.kerangkaPembelajaranMendalam.praktikPedagogis || '-'}</td><td>{(data.kerangkaPembelajaranMendalam as any).indikatorCapaian || '-'}</td></tr>)}
+      </tbody></table>
+      <table className="rpm-table"><tbody>
+        {[
+          ['Kemitraan Pembelajaran',data.kerangkaPembelajaranMendalam.kemitraan],
+          ['Lingkungan Pembelajaran',data.kerangkaPembelajaranMendalam.lingkungan],
+          ['Pemanfaatan Digital',data.kerangkaPembelajaranMendalam.pemanfaatanDigital],
+        ].filter(([,v])=>v).map(([k,v],i)=><tr key={i}><td className="rpm-label">{k}</td><td>{v}</td></tr>)}
+      </tbody></table>
+
+      <h3 className="rpm-title">D. LANGKAH-LANGKAH PEMBELAJARAN</h3>
+      {data.pertemuanList.length ? data.pertemuanList.map((p:any,i:number)=><div key={p.id||i}>
+        <h4 className="rpm-subtitle">{p.judul || `Pertemuan ${i+1}`} — {p.alokasiWaktu || ''}</h4>
+        {p.tujuanPertemuan && <p><b>Tujuan:</b> {p.tujuanPertemuan}</p>}
+        {p.indikator && <p><b>Indikator:</b> {p.indikator}</p>}
+        <div className="rpm-activity-list">
+          {[
+            ['KEGIATAN AWAL', p.kegiatanAwal],
+            ['KEGIATAN INTI — MEMAHAMI', p.memahami],
+            ['KEGIATAN INTI — MENGAPLIKASI', p.mengaplikasi],
+            ['KEGIATAN INTI — MEREFLEKSI', p.merefleksi],
+            ['KEGIATAN PENUTUP', p.kegiatanPenutup],
+          ].filter(([, v]) => typeof v === 'string' && v.trim()).map(([judul, isi], j) => (
+            <section className="rpm-activity" key={j}>
+              <h5 className="rpm-activity-heading">{judul}</h5>
+              <div className="rpm-activity-content rpm-body">{isi}</div>
+            </section>
+          ))}
+        </div>
+        {p.kegiatanIntiAsli && ![p.memahami, p.mengaplikasi, p.merefleksi].some((v: string) => v && v.trim()) && (
+          <section className="rpm-activity">
+            <h5 className="rpm-activity-heading">KEGIATAN INTI (DATA LAMA)</h5>
+            <div className="rpm-activity-content rpm-body">{p.kegiatanIntiAsli}</div>
+          </section>
+        )}
+      </div>) : <p>Rencana pertemuan belum diisi.</p>}
+
+      <h3 className="rpm-title">E. ASESMEN</h3>
+      <table className="rpm-table"><thead><tr><th>Jenis Asesmen</th><th>Metode / Instrumen</th><th>Tujuan</th></tr></thead><tbody>
+        {data.asesmenList.map((a:any,i:number)=><tr key={a.id||i}><td className="rpm-label">{a.jenis}<br/>{a.judul}</td><td><p><b>Teknik:</b> {a.teknik || '-'}</p><p><b>Instrumen:</b> {a.instrumen || '-'}</p><p><b>Waktu:</b> {a.waktuPelaksanaan || '-'}</p></td><td>{a.tujuan || '-'}</td></tr>)}
+      </tbody></table>
+      {data.asesmenList.map((a:any,i:number)=>(a.butirSoalList||[]).length>0&&<div key={`soal-${i}`}>
+        <h4 className="rpm-subtitle">Soal — {a.judul || `Asesmen ${i+1}`}</h4>
+        <table className="rpm-table"><thead><tr><th>No.</th><th>Pertanyaan</th><th>Jawaban Siswa</th></tr></thead><tbody>
+          {a.butirSoalList.map((q:any,j:number)=><tr key={q.id||j}><td>{j+1}</td><td>{q.pertanyaan}<br/>{(q.pilihanJawaban||[]).map((v:string,k:number)=><p key={k}>{String.fromCharCode(65+k)}. {v}</p>)}</td><td style={{height:34}}></td></tr>)}
+        </tbody></table>
+      </div>)}
+
+      <h3 className="rpm-title">F. RUBRIK PENILAIAN</h3>
+      {data.rubrikList.map((r:any,ri:number)=><div key={r.id||ri}>
+        <h4 className="rpm-subtitle">{r.judul || `Rubrik ${ri+1}`}</h4>
+        {r.tujuan && <p><b>Tujuan:</b> {r.tujuan}</p>}
+        {(r.aspekList||[]).map((a:any,ai:number)=>{const levels=[...(a.tingkatList||[])].sort((x:any,y:any)=>(Number(y.skor)||0)-(Number(x.skor)||0));return <table className="rpm-table" key={a.id||ai}>
+          <thead><tr><th>{a.namaAspek || `Aspek ${ai+1}`}</th>{levels.map((t:any,j:number)=><th key={t.id||j}>{t.namaTingkat || 'Tingkat'} ({t.skor})</th>)}</tr></thead>
+          <tbody><tr><td className="rpm-label">Deskripsi</td>{levels.map((t:any,j:number)=><td key={t.id||j}>{t.deskripsi || '-'}</td>)}</tr></tbody>
+        </table>})}
+      </div>)}
+
+      <h3 className="rpm-title">G. PENGAYAAN DAN REMEDIAL</h3>
+      <table className="rpm-table"><tbody>
+        {[
+          ['Pengayaan',data.pengayaanRemedial.pengayaan],['Remedial',data.pengayaanRemedial.remedial],
+          ['Pendampingan',data.pengayaanRemedial.pendampingan],['Tindak Lanjut',data.pengayaanRemedial.tindakLanjut],
+        ].filter(([,v])=>v).map(([k,v],i)=><tr key={i}><td className="rpm-label">{k}</td><td className="rpm-body">{v}</td></tr>)}
+      </tbody></table>
+
+      <h3 className="rpm-title">H. MEDIA DAN SUMBER BELAJAR</h3>
+      <table className="rpm-table"><thead><tr><th>No.</th><th>Nama</th><th>Keterangan / Jenis</th></tr></thead><tbody>
+        {data.mediaList.map((m:any,i:number)=><tr key={m.id||i}><td>{i+1}</td><td>{typeof m==='string'?m:m.nama}</td><td>{typeof m==='string'?'Media pembelajaran':m.keterangan||'-'}</td></tr>)}
+        {data.sumberBelajarList.map((x:any,i:number)=><tr key={x.id||i}><td>{data.mediaList.length+i+1}</td><td>{x.nama}</td><td>{[x.jenis,x.keterangan,x.url].filter(Boolean).join(' — ') || '-'}</td></tr>)}
+        {!data.mediaList.length&&!data.sumberBelajarList.length&&<tr><td colSpan={3}>Belum ada media/sumber belajar.</td></tr>}
+      </tbody></table>
+
+      <h3 className="rpm-title">I. LEMBAR KERJA PESERTA DIDIK (LKPD)</h3>
+      {data.lkpdList.length ? data.lkpdList.map((x:any,i:number)=><div key={x.id||i}>
+        <h4 className="rpm-subtitle">{x.judul || `LKPD ${i+1}`}</h4>
+        <table className="rpm-table"><tbody>
+          {[
+            ['Tujuan',x.tujuan],['Materi',x.materi],['Petunjuk',x.petunjuk],['Langkah Kerja',x.langkahKerja],['Tugas',x.tugas],['Penilaian',x.penilaian],
+          ].filter(([,v])=>v).map(([k,v],j)=><tr key={j}><td className="rpm-label">{k}</td><td className="rpm-body">{v}</td></tr>)}
+          {(x.pertanyaan||[]).length>0&&<tr><td className="rpm-label">Pertanyaan</td><td>{x.pertanyaan.map((q:string,j:number)=><p key={j}>{j+1}. {q}</p>)}</td></tr>}
+        </tbody></table>
+        <p>Nama: ........................................ Kelas: ............... Tanggal: ...............</p>
+        <table className="rpm-table"><thead><tr><th>No.</th><th>Jawaban / Hasil Pekerjaan</th></tr></thead><tbody>{[1,2,3].map(n=><tr key={n}><td>{n}</td><td style={{height:36}}></td></tr>)}</tbody></table>
+      </div>) : <p>LKPD belum ditambahkan.</p>}
+
+      <h3 className="rpm-title">J. LAMPIRAN TAMBAHAN</h3>
+      {data.lampiranList.length ? <table className="rpm-table"><thead><tr><th>No.</th><th>Judul / Jenis</th><th>Deskripsi / File</th></tr></thead><tbody>
+        {data.lampiranList.map((x:any,i:number)=><tr key={x.id||i}><td>{i+1}</td><td><b>{x.judul || `Lampiran ${i+1}`}</b><br/>{x.jenis}</td><td>{x.deskripsi || '-'}{x.namaFile&&<p>File: {x.namaFile}</p>}{x.fileUrl&&<p>URL: {x.fileUrl}</p>}</td></tr>)}
+      </tbody></table> : <p>Tidak ada lampiran tambahan.</p>}
+
+      <h3 className="rpm-title">K. REFLEKSI PEMBELAJARAN</h3>
+      <table className="rpm-table"><thead><tr><th>Komponen</th><th>Uraian</th></tr></thead><tbody>
+        {[
+          ['Refleksi Guru',data.refleksi.refleksiGuru],['Refleksi Peserta Didik',data.refleksi.refleksiPesertaDidik],
+          ['Kendala',data.refleksi.kendala],['Rencana Perbaikan',data.refleksi.rencanaPerbaikan],
+        ].filter(([,v])=>v).map(([k,v],i)=><tr key={i}><td className="rpm-label">{k}</td><td className="rpm-body">{v}</td></tr>)}
+      </tbody></table>
+
+      <h3 className="rpm-title">L. PENGESAHAN</h3>
+      <p className="rpm-body">RPM dan Modul Ajar ini disusun untuk mata pelajaran {data.identitas.mataPelajaran || '-'} kelas {data.identitas.kelas || '-'} fase {data.identitas.fase || '-'}. Dokumen ini menjadi panduan pelaksanaan pembelajaran yang berkesadaran, bermakna, dan menggembirakan.</p>
+      <div className="rpm-sign">
+        <div><p>Mengetahui,</p><p>Kepala Sekolah</p><div className="rpm-sign-space"></div><b>{data.pengesahan.namaKepalaSekolah || '........................................'}</b><p>NIP. {data.pengesahan.nipKepalaSekolah || '........................................'}</p></div>
+        <div><p>{data.pengesahan.tempat || '........................'}, {data.pengesahan.tanggal || '........................'}</p><p>Guru / Penyusun</p><div className="rpm-sign-space"></div><b>{data.pengesahan.namaPenyusun || data.identitas.namaPenyusun || namaGuru}</b><p>NIP. {data.pengesahan.nipPenyusun || data.identitas.nipPenyusun || '-'}</p></div>
+      </div>
     </div>
   </div>;
 }

@@ -76,6 +76,11 @@ export default function Pengaturan() {
   const [website, setWebsite] = useState('');
   const [email, setEmail] = useState('');
 
+  // Identitas pemerintah daerah
+  const [namaPemerintah, setNamaPemerintah] = useState('');
+  const [namaDinas, setNamaDinas] = useState('');
+  const [logoPemerintahUrl, setLogoPemerintahUrl] = useState('');
+
   // WhatsApp
   const [nomorWhatsappTerhubung, setNomorWhatsappTerhubung] = useState('');
   const [nomorWhatsappLama, setNomorWhatsappLama] = useState('');
@@ -114,6 +119,9 @@ export default function Pengaturan() {
           setNamaSekolah(data.namaSekolah || '');
           setNpsn(data.npsn || '');
           setAlamat(data.alamat || '');
+          setNamaPemerintah(data.namaPemerintah || '');
+          setNamaDinas(data.namaDinas || '');
+          setLogoPemerintahUrl(data.logoPemerintahUrl || '');
           setKepalaSekolah(data.kepalaSekolah || '');
           setWebsite(data.website || '');
           setEmail(data.email || '');
@@ -337,6 +345,9 @@ export default function Pengaturan() {
           kepalaSekolah,
           website,
           email,
+          namaPemerintah,
+          namaDinas,
+          logoPemerintahUrl,
           jenjangSekolah: urutkanJenjang(jenjangSekolah),
           updatedAt: new Date().toISOString(),
           konfigurasiJenjangUpdatedAt: new Date().toISOString(),
@@ -449,6 +460,77 @@ export default function Pengaturan() {
           </div>
 
           {/* KONFIGURASI JENJANG */}
+
+{/* IDENTITAS PEMERINTAH DAERAH */}
+<div className="border-t border-slate-100 pt-5 space-y-4">
+  <div>
+    <h2 className="text-lg font-bold text-[#082B62]">
+      Identitas Pemerintah Daerah
+    </h2>
+    <p className="text-sm text-slate-500 mt-1">
+      Informasi ini digunakan untuk membuat kop resmi dokumen Modul Ajar dan RPM.
+    </p>
+  </div>
+
+  <div>
+    <label className="block text-sm font-bold text-slate-700 mb-1">
+      Nama Pemerintah Daerah
+    </label>
+    <input
+      type="text"
+      value={namaPemerintah}
+      onChange={(e) => setNamaPemerintah(e.target.value)}
+      placeholder="Contoh: PEMERINTAH KABUPATEN BONE"
+      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
+    />
+  </div>
+
+  <div>
+    <label className="block text-sm font-bold text-slate-700 mb-1">
+      Nama Dinas Pendidikan
+    </label>
+    <input
+      type="text"
+      value={namaDinas}
+      onChange={(e) => setNamaDinas(e.target.value)}
+      placeholder="Contoh: DINAS PENDIDIKAN"
+      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
+    />
+  </div>
+
+  <div>
+    <label className="block text-sm font-bold text-slate-700 mb-1">
+      URL Logo Pemerintah Daerah
+    </label>
+    <input
+      type="url"
+      value={logoPemerintahUrl}
+      onChange={(e) => setLogoPemerintahUrl(e.target.value)}
+      placeholder="https://alamat-gambar-logo.png"
+      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#155EEF] outline-none font-medium"
+    />
+    <p className="text-xs text-slate-500 mt-1">
+      Masukkan alamat gambar logo resmi yang dapat diakses secara daring.
+    </p>
+  </div>
+
+  {logoPemerintahUrl.trim() && (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-bold text-slate-600 mb-3">
+        PRATINJAU LOGO
+      </p>
+      <img
+        src={logoPemerintahUrl}
+        alt="Pratinjau Logo Pemerintah Daerah"
+        className="w-24 h-24 object-contain bg-white rounded-lg border border-slate-200 p-2"
+        onError={(e) => {
+          e.currentTarget.style.display = 'none';
+        }}
+      />
+    </div>
+  )}
+</div>
+
           <div className="border-t border-slate-100 pt-5 space-y-4">
             <div>
               <h2 className="text-lg font-bold text-[#082B62]">Konfigurasi Jenjang Pendidikan</h2>

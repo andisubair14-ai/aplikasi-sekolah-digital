@@ -7,6 +7,14 @@
     <title>aplikasi-sekolah-digital</title>
   </head>
   <body>
+    <script>
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  ) {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+</script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

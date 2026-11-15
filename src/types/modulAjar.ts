@@ -1,12 +1,13 @@
 
 /**
- * STRUKTUR DATA MODUL AJAR V2
+ * STRUKTUR DATA RPM / MODUL AJAR V2
  * Format universal SD dan SMP.
  *
- * Catatan:
- * - Tidak menghapus struktur data versi lama.
+ * Prinsip:
+ * - Field lama tetap dipertahankan.
+ * - Field baru ditambahkan secara opsional.
  * - Data Firestore lama tetap dapat dibaca.
- * - Field versi 2 disusun lebih terstruktur.
+ * - Tidak melakukan migrasi atau penghapusan data secara otomatis.
  */
 
 export type JenjangSekolah = 'SD' | 'SMP';
@@ -33,6 +34,10 @@ export interface IdentifikasiPesertaDidik {
   pengetahuanAwal: string;
   kebutuhanBelajar: string;
   kondisiKelas: string;
+
+  // Tambahan untuk format RPM.
+  minatMurid?: string;
+  latarBelakangMurid?: string;
 }
 
 export interface DesainPembelajaran {
@@ -44,6 +49,11 @@ export interface DesainPembelajaran {
   pendekatanPembelajaran: string;
   metodePembelajaran: string;
   tujuanPembelajaran: string[];
+
+  // Tambahan untuk menyesuaikan format dokumen contoh.
+  lintasDisiplinIlmu?: string;
+  indikatorPencapaian?: string;
+  topikPembelajaran?: string;
 }
 
 export interface KerangkaPembelajaranMendalam {
@@ -53,6 +63,9 @@ export interface KerangkaPembelajaranMendalam {
   kemitraan: string;
   lingkungan: string;
   pemanfaatanDigital: string;
+
+  // Tambahan untuk indikator capaian pada kerangka pembelajaran.
+  indikatorCapaian?: string;
 }
 
 export interface LangkahPembelajaran {
@@ -74,8 +87,10 @@ export interface Pertemuan {
   mengaplikasi: string;
   merefleksi: string;
   kegiatanPenutup: string;
-  // Menyimpan kegiatan inti dari format pertemuan lama.
+
+  // Mempertahankan kegiatan inti dari format lama.
   kegiatanIntiAsli?: string;
+
   mediaList: string[];
   sumberBelajarList: string[];
   asesmenIdList: string[];
@@ -89,6 +104,9 @@ export type JenisAsesmen =
   | 'Proyek'
   | 'Tugas'
   | 'Lainnya';
+
+// Tahapan asesmen pada format RPM.
+export type TahapAsesmen = 'Awal' | 'Proses' | 'Akhir';
 
 export interface ButirSoal {
   id: string;
@@ -110,6 +128,9 @@ export interface Asesmen {
   butirSoalList: ButirSoal[];
   kriteriaPenilaian: string;
   tindakLanjut: string;
+
+  // Opsional agar data asesmen lama tetap kompatibel.
+  tahap?: TahapAsesmen;
 }
 
 export interface TingkatRubrik {
@@ -138,6 +159,19 @@ export interface PengayaanRemedial {
   pendampingan: string;
   tindakLanjut: string;
 }
+
+/**
+ * Media pembelajaran.
+ * Mendukung format teks lama maupun objek baru.
+ */
+export interface MediaPembelajaran {
+  id?: string;
+  nama: string;
+  keterangan: string;
+  jenis?: string;
+}
+
+export type ItemMediaPembelajaran = string | MediaPembelajaran;
 
 export interface LKPD {
   id: string;
@@ -169,6 +203,20 @@ export interface Lampiran {
   contentType: string;
 }
 
+/**
+ * Instrumen penilaian tambahan untuk format RPM.
+ * Seluruh field opsional agar dokumen lama tetap kompatibel.
+ */
+export interface InstrumenPenilaianTambahan {
+  soalTesTertulis?: string;
+  kunciJawaban?: string;
+  rubrikKeterampilan?: string;
+  rubrikSikap?: string;
+  observasiSikap?: string;
+  penilaianDiri?: string;
+  penilaianAntarteman?: string;
+}
+
 export interface RefleksiPembelajaran {
   refleksiGuru: string;
   refleksiPesertaDidik: string;
@@ -186,7 +234,7 @@ export interface PengesahanModul {
 }
 
 /**
- * Struktur dokumen Modul Ajar versi 2.
+ * Struktur dokumen Modul Ajar / RPM versi 2.
  */
 export interface ModulAjarV2 {
   id?: string;
@@ -209,11 +257,16 @@ export interface ModulAjarV2 {
 
   pengayaanRemedial: PengayaanRemedial;
 
-  mediaList: string[];
+  // String lama dan objek media baru sama-sama didukung.
+  mediaList: ItemMediaPembelajaran[];
+
   sumberBelajarList: SumberBelajar[];
 
   lkpdList: LKPD[];
   lampiranList: Lampiran[];
+
+  // Instrumen tambahan untuk format RPM.
+  instrumenPenilaian?: InstrumenPenilaianTambahan;
 
   refleksi: RefleksiPembelajaran;
   pengesahan: PengesahanModul;
@@ -222,8 +275,8 @@ export interface ModulAjarV2 {
   updatedAt?: unknown;
 
   /**
-   * Menyimpan salinan data lama untuk kompatibilitas.
-   * Jangan dihapus sebelum proses migrasi dinyatakan aman.
+   * Salinan data lama untuk kompatibilitas.
+   * Jangan dihapus sebelum migrasi dinyatakan aman.
    */
   legacyData?: Record<string, unknown>;
 }
@@ -239,6 +292,7 @@ export interface ModulAjarLegacy {
   namaGuru?: string;
 
   judulModul?: string;
+  namaSekolah?: string;
   jenjang?: string;
   kelas?: string;
   fase?: string;
