@@ -7,7 +7,7 @@ import {
   type ReactNode
 } from 'react';
 
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getIdTokenResult } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
 import {
@@ -37,12 +37,14 @@ interface AuthContextType {
   user: User | null;
   userData: UserData | null;
   loading: boolean;
+  platformOwner: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userData: null,
-  loading: true
+  loading: true,
+  platformOwner: false
 });
 
 export const AuthProvider = ({
@@ -53,6 +55,7 @@ export const AuthProvider = ({
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [platformOwner, setPlatformOwner] = useState(false);
 
   useEffect(() => {
     let unsubscribeProfil: (() => void) | null = null;
@@ -61,7 +64,7 @@ export const AuthProvider = ({
     let uidYangSedangDipantau: string | null = null;
     let masihTerpasang = true;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (unsubscribeProfil) {
         unsubscribeProfil();
         unsubscribeProfil = null;
@@ -77,13 +80,55 @@ export const AuthProvider = ({
       setUser(currentUser);
       setUserData(null);
       setLoading(true);
+      setPlatformOwner(false);
 
       if (!currentUser) {
-        setLoading(false);
-        return;
-      }
+  setPlatformOwner(false);
+  setLoading(false);
+  return;
+}
 
-      const profilRef = doc(db, 'users', currentUser.uid);
+// =========================================
+// PEMERIKSAAN IDENTITAS PLATFORM OWNER
+// =========================================
+
+try {
+  // Meminta token terbaru agar Custom Claims yang baru
+  // ditetapkan oleh backend dapat terbaca.
+  const tokenResult = await getIdTokenResult(currentUser, true);
+
+  // Pastikan akun belum berganti selama pemeriksaan.
+  if (
+    !masihTerpasang ||
+    uidYangSedangDipantau !== currentUser.uid
+  ) {
+    return;
+  }
+
+  const isPlatformOwner =
+    tokenResult.claims.platformOwner === true;
+
+  setPlatformOwner(isPlatformOwner);
+
+  // Super Admin tidak memerlukan dokumen users/{uid}.
+  if (isPlatformOwner) {
+    setLoading(false);
+    return;
+  }
+} catch (error) {
+  console.error('Gagal memeriksa hak Platform Owner:', error);
+  setPlatformOwner(false);
+}
+
+// Lanjutkan proses normal untuk akun Admin, Guru, dan Kepsek.
+if (
+  !masihTerpasang ||
+  uidYangSedangDipantau !== currentUser.uid
+) {
+  return;
+}
+
+const profilRef = doc(db, 'users', currentUser.uid);
 
       unsubscribeProfil = onSnapshot(
         profilRef,
@@ -317,7 +362,7 @@ export const AuthProvider = ({
 
   return (
     <AuthContext.Provider
-      value={{ user, userData, loading }}
+      value={{ user, userData, loading, platformOwner }}
     >
       {children}
     </AuthContext.Provider>

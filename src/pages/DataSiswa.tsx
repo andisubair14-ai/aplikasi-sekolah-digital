@@ -34,6 +34,7 @@ interface Kelas {
   jenjang: string;
   tingkat: string;
   waliKelas: string;
+  waliKelasId?: string | null;
   tahunAjaran: string;
 }
 
@@ -495,48 +496,62 @@ export default function DataSiswa() {
   // MENENTUKAN KELAS YANG DITUGASKAN KEPADA GURU
   // ==========================================
 
-  const kelasDiizinkan = useMemo(() => {
-    if (!isGuru || !guruProfile || !tahunAktif) {
-      return [];
-    }
-
-    // Guru Mata Pelajaran:
-    // Menggunakan daftar ID rombel yang ditugaskan.
-    if (guruProfile.jabatan === 'Guru Mata Pelajaran') {
-      const daftarId: string[] = Array.isArray(guruProfile.kelasDiampu)
-        ? guruProfile.kelasDiampu
-        : [];
-
-      return daftarId.filter((id) =>
-        kelasList.some(
-          (item) =>
-            item.id === id &&
-            item.tahunAjaran === tahunAktif.tahun
-        )
-      );
-    }
-
-    // Wali Kelas:
-    // Menggunakan nama wali kelas pada dokumen rombel.
-    // Dengan cara ini, kelas 1A dan 1B tidak tertukar.
-    if (guruProfile.jabatan === 'Wali Kelas') {
-      return kelasList
-        .filter(
-          (item) =>
-            item.waliKelas === guruProfile.nama &&
-            item.jenjang === guruProfile.jenjangWali &&
-            item.tahunAjaran === tahunAktif.tahun
-        )
-        .map((item) => item.id);
-    }
-
+  
+const kelasDiizinkan = useMemo(() => {
+  if (!isGuru || !guruProfile || !tahunAktif) {
     return [];
-  }, [
-    isGuru,
-    guruProfile,
-    kelasList,
-    tahunAktif?.tahun
-  ]);
+  }
+
+  // Guru Mata Pelajaran: tetap menggunakan ID rombel.
+  if (guruProfile.jabatan === 'Guru Mata Pelajaran') {
+    const daftarId: string[] = Array.isArray(guruProfile.kelasDiampu)
+      ? guruProfile.kelasDiampu
+      : [];
+
+    return daftarId.filter((id) =>
+      kelasList.some(
+        (item) =>
+          item.id === id &&
+          item.tahunAjaran === tahunAktif.tahun
+      )
+    );
+  }
+
+  // Wali Kelas: utamakan waliKelasId agar
+  // konsisten dengan halaman Absensi.
+  if (guruProfile.jabatan === 'Wali Kelas') {
+    return kelasList
+      .filter((item) => {
+        const tahunCocok =
+          item.tahunAjaran === tahunAktif.tahun;
+
+        if (!tahunCocok) return false;
+
+        // Pencocokan utama menggunakan ID guru.
+        if (item.waliKelasId) {
+          return item.waliKelasId === guruProfile.id;
+        }
+
+        // Kompatibilitas dengan data rombel lama.
+        return (
+          item.waliKelas === guruProfile.nama &&
+          (
+            !guruProfile.jenjangWali ||
+            item.jenjang === guruProfile.jenjangWali
+          )
+        );
+      })
+      .map((item) => item.id);
+  }
+
+  return [];
+}, [
+  isGuru,
+  guruProfile,
+  kelasList,
+  tahunAktif?.tahun
+]);
+
 
   // ==========================================
   // GURU:
