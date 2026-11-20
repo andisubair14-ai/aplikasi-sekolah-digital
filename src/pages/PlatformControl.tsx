@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../lib/firebase';
 import gambarGedungSekolah from '../assets/gedung-sekolah.png';
 import gambarPetaIndonesia from '../assets/peta-indonesia.png';
@@ -343,20 +344,48 @@ export default function PlatformControl() {
   }[status]);
 
   const saveRegistrationDecision = async (
-    registration: SchoolRegistration,
-    status: RegistrationStatus,
-    note = '',
-  ) => {
-    if (savingRegistration) return;
-    if ((status === 'ditolak' || status === 'perlu_perbaikan') && !note.trim()) {
-      alert(status === 'ditolak' ? 'Alasan penolakan wajib diisi.' : 'Catatan perbaikan wajib diisi.');
-      return;
-    }
-    if (status === 'disetujui_menunggu_provisioning' &&
-        !window.confirm('Setujui pendaftaran ini? Tahap ini hanya mencatat persetujuan, belum membuat akun atau mengirim email.')) return;
+  registration: SchoolRegistration,
+  status: RegistrationStatus,
+  note = '',
+) => {
+  if (savingRegistration) return;
 
-    setSavingRegistration(true);
-    try {
+  if ((status === 'ditolak' || status === 'perlu_perbaikan') && !note.trim()) {
+    alert(status === 'ditolak'
+      ? 'Alasan penolakan wajib diisi.'
+      : 'Catatan perbaikan wajib diisi.');
+    return;
+  }
+
+  if (status === 'disetujui_menunggu_provisioning') {
+    const konfirmasi = window.confirm(
+      `Setujui pendaftaran ${registration.namaSekolah}?\n\n` +
+      'Sistem akan membuat kode sekolah dan menyiapkan tiga undangan aktivasi untuk Admin, Guru, dan Kepala Sekolah.'
+    );
+
+    if (!konfirmasi) return;
+  }
+
+  setSavingRegistration(true);
+
+  try {
+    if (status === 'disetujui_menunggu_provisioning') {
+      const functions = getFunctions(auth.app);
+      const prosesPersetujuan = httpsCallable<
+        { pendaftaranId: string },
+        { success: boolean; sekolahId: string }
+      >(functions, 'setujuiPendaftaranSekolah');
+
+      const hasil = await prosesPersetujuan({
+        pendaftaranId: registration.id,
+      });
+
+      alert(
+        `Pendaftaran berhasil diproses!\n\n` +
+        `Kode Sekolah: ${hasil.data.sekolahId}\n` +
+        'Undangan aktivasi telah dikirim ke email kontak sekolah.'
+      );
+    } else {
       await updateDoc(doc(db, 'pendaftaran_sekolah', registration.id), {
         status,
         catatanAdmin: note.trim(),
@@ -365,16 +394,23 @@ export default function PlatformControl() {
         ditinjauPada: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      setSelectedRegistration(null);
-      setRegistrationAction(null);
-      setRegistrationNote('');
-    } catch (error) {
-      console.error('Gagal menyimpan keputusan pendaftaran:', error);
-      alert('Keputusan gagal disimpan. Periksa Rules Firestore untuk pendaftaran_sekolah.');
-    } finally {
-      setSavingRegistration(false);
     }
-  };
+
+    setSelectedRegistration(null);
+    setRegistrationAction(null);
+    setRegistrationNote('');
+  } catch (error) {
+    console.error('Gagal memproses keputusan pendaftaran:', error);
+
+    const pesan = error instanceof Error
+      ? error.message
+      : 'Terjadi kesalahan yang tidak diketahui.';
+
+    alert(`Proses belum berhasil:\n${pesan}`);
+  } finally {
+    setSavingRegistration(false);
+  }
+};
 
   useEffect(() => {
     setSchoolsLoading(true);

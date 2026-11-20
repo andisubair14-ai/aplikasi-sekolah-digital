@@ -44,12 +44,15 @@ for (const namaField of konfigurasiWajib) {
 // Inisialisasi Firebase utama
 const app = initializeApp(firebaseConfig);
 
-// App Check untuk pengembangan lokal.
-// index.html harus mengaktifkan FIREBASE_APPCHECK_DEBUG_TOKEN.
-export const appCheck = initializeAppCheck(app, {
-  provider: new ReCaptchaV3Provider("debug-placeholder"),
-  isTokenAutoRefreshEnabled: true,
-});
+// App Check hanya aktif pada produksi.
+export const appCheck = import.meta.env.PROD
+  ? initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(
+        import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY
+      ),
+      isTokenAutoRefreshEnabled: true,
+    })
+  : null;
 
 // Firebase Authentication, Firestore, dan Storage
 export const auth = getAuth(app);

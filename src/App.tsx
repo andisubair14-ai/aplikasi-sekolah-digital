@@ -47,6 +47,7 @@ import RuangKerjaGuru from './pages/RuangKerjaGuru';
 import ModulAjar from './pages/ModulAjar';
 import PlatformControl from './pages/PlatformControl';
 import PendaftaranSekolah from './pages/PendaftaranSekolah';
+import AktivasiAkunSekolah from './pages/AktivasiAkunSekolah';
 
 // =========================================
 // HALAMAN SEMENTARA
@@ -86,6 +87,10 @@ function App() {
           path="/daftar-sekolah"
           element={<PendaftaranSekolah />}
         />
+        <Route
+         path="/aktivasi-akun"
+         element={<AktivasiAkunSekolah />}
+         />
 
 
         {/* =====================================
