@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   collection,
@@ -14,7 +15,6 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type StatusGuru = 'Hadir' | 'Izin' | 'Sakit' | 'Dinas Luar' | 'Alpa';
 
@@ -216,6 +216,7 @@ const idDokumen = (tanggal: string, guruId: string) => `${tanggal}_${guruId}`;
 
 export default function AbsensiGuru() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const isAdmin = userData?.role === 'admin';
   const isGuru = userData?.role === 'guru';
   const isKepsek = userData?.role === 'kepsek';
@@ -357,9 +358,10 @@ export default function AbsensiGuru() {
     setErrorData('');
     const sumber = collection(db, 'absensi_guru');
     const q = isGuru
-      ? query(sumber, where('guruId', '==', guruIdSaya))
+      ? query(sumber, where('sekolahId', '==', sekolahId), where('guruId', '==', guruIdSaya))
       : query(
           sumber,
+          where('sekolahId', '==', sekolahId),
           where('tanggal', '>=', rentangBulan.awal),
           where('tanggal', '<=', rentangBulan.akhir)
         );
@@ -382,7 +384,7 @@ export default function AbsensiGuru() {
     );
 
     return () => unsubscribe();
-  }, [isGuru, guruIdSaya, bolehMemantau, rentangBulan.awal, rentangBulan.akhir]);
+  }, [isGuru, guruIdSaya, sekolahId, bolehMemantau, rentangBulan.awal, rentangBulan.akhir]);
 
   // Admin hanya memantau QR yang aktif. QR tidak dibuat atau diganti otomatis.
   useEffect(() => {
@@ -434,6 +436,7 @@ export default function AbsensiGuru() {
       await setDoc(
         doc(db, 'pengaturan', 'qr_absensi_guru'),
         {
+          sekolahId,
           token,
           expiresAt: Timestamp.fromDate(waktuKedaluwarsa),
           generatedAt: serverTimestamp(),
@@ -469,8 +472,7 @@ export default function AbsensiGuru() {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      collection(db, 'guru'),
+    const unsubscribe = onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const records = snapshot.docs.map((item) => ({
           id: item.id,

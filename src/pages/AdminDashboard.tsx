@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -106,6 +107,9 @@ function StatIcon({ name }: { name: StatIconName }) {
 }
 
 export default function AdminDashboard() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [siswaList, setSiswaList] = useState<DashboardRow[]>([]);
   const [pegawaiList, setPegawaiList] = useState<DashboardRow[]>([]);
   const [kelasList, setKelasList] = useState<ClassRow[]>([]);
@@ -134,24 +138,24 @@ export default function AdminDashboard() {
     };
 
     const unsubscribers = [
-      onSnapshot(collection(db, 'siswa'), (snap) => {
+      onSnapshot(query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setSiswaList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
         markReady('siswa');
       }, handleError('siswa', 'siswa')),
-      onSnapshot(collection(db, 'guru'), (snap) => {
+      onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setPegawaiList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
         markReady('pegawai');
       }, handleError('pegawai', 'pegawai')),
-      onSnapshot(collection(db, 'kelas'), (snap) => {
+      onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setKelasList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as ClassRow[]);
         markReady('kelas');
       }, handleError('kelas', 'kelas')),
-      onSnapshot(collection(db, 'tahun_ajaran'), (snap) => {
+      onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setTahunList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as YearRow[]);
         markReady('tahun');
       }, handleError('tahun ajaran', 'tahun')),
       onSnapshot(
-        query(collection(db, 'absensi'), where('tanggal', '>=', weekStart), where('tanggal', '<=', today)),
+        query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('tanggal', '>=', weekStart), where('tanggal', '<=', today)),
         (snap) => {
           setAbsensiList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
           markReady('absensi');

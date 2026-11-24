@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../lib/firebase';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ilustrasiSekolah from '../assets/ilustrasi-hero-sekolah.png';
@@ -44,7 +45,17 @@ export default function PendaftaranSekolah() {
   const [setuju, setSetuju] = useState(false);
   const [pesan, setPesan] = useState('');
   const [tipePesan, setTipePesan] = useState<'sukses' | 'error' | 'info'>('info');
-  const [form, setForm] = useState({ namaSekolah: '', npsn: '', kabupaten: '', alamat: '', namaKepalaSekolah: '', whatsapp: '', email: '' });
+  const [form, setForm] = useState({
+    namaSekolah: '',
+    npsn: '',
+    kabupaten: '',
+    alamat: '',
+    namaAdmin: '',
+    namaKepalaSekolah: '',
+    whatsapp: '',
+    email: '',
+    catatanPendaftar: '',
+  });
   const [sedangMengirim, setSedangMengirim] = useState(false);
   const update = (key: keyof typeof form, value: string) => setForm(prev => ({ ...prev, [key]: value }));
   const npsnValid = useMemo(() => /^\d{8}$/.test(form.npsn), [form.npsn]);
@@ -59,6 +70,18 @@ export default function PendaftaranSekolah() {
       return;
     }
 
+    if (!form.namaAdmin.trim()) {
+      setTipePesan('error');
+      setPesan('Nama calon administrator sekolah wajib diisi.');
+      return;
+    }
+
+    if (!form.namaKepalaSekolah.trim()) {
+      setTipePesan('error');
+      setPesan('Nama kepala sekolah wajib diisi.');
+      return;
+    }
+
     if (!provinsi || !jenjang || !setuju) {
       setTipePesan('error');
       setPesan('Lengkapi seluruh data wajib dan centang pernyataan sebelum mengirim.');
@@ -69,44 +92,127 @@ export default function PendaftaranSekolah() {
     setPesan('');
 
     try {
-      await addDoc(collection(db, 'pendaftaran_sekolah'), {
+      // 1. Coba melalui Cloud Function untuk validasi server-side dan pencegahan duplikasi ketat
+      const ajukan = httpsCallable<
+        {
+          namaSekolah: string;
+          npsn: string;
+          jenjang: string;
+          provinsi: string;
+          kabupaten: string;
+          alamat: string;
+          namaAdmin: string;
+          namaKepalaSekolah: string;
+          telepon: string;
+          email: string;
+          catatanPendaftar: string;
+        },
+        { success: boolean; pendaftaranId: string; message: string }
+      >(functions, 'ajukanPendaftaranSekolah');
+
+      await ajukan({
         namaSekolah: form.namaSekolah.trim(),
         npsn: form.npsn.trim(),
         jenjang,
         provinsi,
         kabupaten: form.kabupaten.trim(),
         alamat: form.alamat.trim(),
+        namaAdmin: form.namaAdmin.trim(),
         namaKepalaSekolah: form.namaKepalaSekolah.trim(),
         telepon: form.whatsapp.trim(),
         email: form.email.trim().toLowerCase(),
-        catatanPendaftar: '',
-        catatanAdmin: '',
-        status: 'menunggu_verifikasi',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        catatanPendaftar: form.catatanPendaftar.trim(),
       });
 
       setTipePesan('sukses');
-      setPesan('Pendaftaran sekolah berhasil dikirim. Data Anda telah kami terima dan sedang menunggu verifikasi oleh Super Admin. Informasi selanjutnya akan disampaikan melalui email aktif yang Anda cantumkan.');
-      setForm({ namaSekolah: '', npsn: '', kabupaten: '', alamat: '', namaKepalaSekolah: '', whatsapp: '', email: '' });
+      setPesan('Pendaftaran sekolah berhasil dikirim. Data Anda telah kami terima dan sedang menunggu verifikasi oleh Super Admin. Informasi selanjutnya dan tautan aktivasi akan disampaikan melalui email aktif yang Anda cantumkan.');
+      setForm({
+        namaSekolah: '',
+        npsn: '',
+        kabupaten: '',
+        alamat: '',
+        namaAdmin: '',
+        namaKepalaSekolah: '',
+        whatsapp: '',
+        email: '',
+        catatanPendaftar: '',
+      });
       setProvinsi('');
       setJenjang('');
       setSetuju(false);
     } catch (error: unknown) {
-      console.error('Gagal mengirim pendaftaran sekolah:', error);
-      const firebaseCode = typeof error === 'object' && error !== null && 'code' in error
-        ? String((error as { code?: unknown }).code)
-        : '';
+      console.error('Gagal mengajukan pendaftaran:', error);
 
-      let pesanError = 'Pendaftaran belum berhasil dikirim. Periksa koneksi internet lalu coba kembali.';
-      if (firebaseCode === 'permission-denied') {
-        pesanError = 'Pengiriman ditolak oleh Firestore Rules. Pastikan aturan pendaftaran_sekolah sudah dipublikasikan dan data formulir sesuai ketentuan.';
-      } else if (firebaseCode === 'unavailable' || firebaseCode === 'network-request-failed') {
-        pesanError = 'Koneksi ke server sedang bermasalah. Periksa internet lalu coba kembali.';
+      const firebaseError = error as { code?: string; message?: string };
+      const code = firebaseError.code || '';
+
+      // Bila duplikat atau argumen tidak valid, tampilkan pesan dari backend secara langsung
+      if (code === 'functions/already-exists') {
+        setTipePesan('error');
+        setPesan(firebaseError.message?.replace(/^.*?:\s*/, '') || 'Sekolah atau pendaftaran dengan NPSN ini sudah terdaftar di sistem.');
+        setSedangMengirim(false);
+        return;
       }
 
-      setTipePesan('error');
-      setPesan(pesanError);
+      if (code === 'functions/invalid-argument') {
+        setTipePesan('error');
+        setPesan(firebaseError.message?.replace(/^.*?:\s*/, '') || 'Data pendaftaran belum valid. Periksa kembali seluruh isian formulir.');
+        setSedangMengirim(false);
+        return;
+      }
+
+      // Fallback: Jika callable belum aktif / offline, coba fallback langsung simpan ke Firestore
+      try {
+        await addDoc(collection(db, 'pendaftaran_sekolah'), {
+          namaSekolah: form.namaSekolah.trim(),
+          npsn: form.npsn.trim(),
+          jenjang,
+          provinsi,
+          kabupaten: form.kabupaten.trim(),
+          alamat: form.alamat.trim(),
+          namaAdmin: form.namaAdmin.trim(),
+          namaKepalaSekolah: form.namaKepalaSekolah.trim(),
+          telepon: form.whatsapp.trim(),
+          email: form.email.trim().toLowerCase(),
+          catatanPendaftar: form.catatanPendaftar.trim(),
+          catatanAdmin: '',
+          status: 'menunggu_verifikasi',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        setTipePesan('sukses');
+        setPesan('Pendaftaran sekolah berhasil dikirim. Permohonan Anda berstatus Menunggu Verifikasi oleh Super Admin.');
+        setForm({
+          namaSekolah: '',
+          npsn: '',
+          kabupaten: '',
+          alamat: '',
+          namaAdmin: '',
+          namaKepalaSekolah: '',
+          whatsapp: '',
+          email: '',
+          catatanPendaftar: '',
+        });
+        setProvinsi('');
+        setJenjang('');
+        setSetuju(false);
+      } catch (firestoreError: unknown) {
+        console.error('Gagal mengirim pendaftaran sekolah:', firestoreError);
+        const fbCode = typeof firestoreError === 'object' && firestoreError !== null && 'code' in firestoreError
+          ? String((firestoreError as { code?: unknown }).code)
+          : '';
+
+        let pesanError = 'Pendaftaran belum berhasil dikirim. Periksa koneksi internet lalu coba kembali.';
+        if (fbCode === 'permission-denied') {
+          pesanError = 'Pengiriman ditolak oleh Firestore Rules. Pastikan aturan pendaftaran_sekolah sesuai ketentuan.';
+        } else if (fbCode === 'unavailable' || fbCode === 'network-request-failed') {
+          pesanError = 'Koneksi ke server sedang bermasalah. Periksa internet lalu coba kembali.';
+        }
+
+        setTipePesan('error');
+        setPesan(pesanError);
+      }
     } finally {
       setSedangMengirim(false);
     }
@@ -176,12 +282,25 @@ export default function PendaftaranSekolah() {
                 <Field label="Alamat Lengkap"><textarea required rows={2} value={form.alamat} onChange={e => update('alamat', e.target.value)} placeholder="Jl. Pendidikan No. 10, Desa ..., Kecamatan ..." className="min-h-[70px] w-full resize-y rounded-[9px] border border-slate-300 bg-white px-3.5 py-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"/></Field>
               </div>
               <div>
-                <div className="mb-3 flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#dcedff] to-[#e8f4ff] px-3 py-2 text-[16px] font-extrabold text-[#10275f]"><Icon name="user" className="h-5 w-5 text-blue-600"/>Data Kontak & Penanggung Jawab</div>
+                <div className="mb-3 flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#dcedff] to-[#e8f4ff] px-3 py-2 text-[16px] font-extrabold text-[#10275f]"><Icon name="user" className="h-5 w-5 text-blue-600"/>Data Calon Administrator Sekolah (Pengelola Akun)</div>
                 <div className="grid gap-3.5 sm:grid-cols-2">
-                  <Field label="Nama Kepala Sekolah" className="sm:col-span-2"><input className={inputClass} required value={form.namaKepalaSekolah} onChange={e => update('namaKepalaSekolah', e.target.value)} placeholder="Contoh: Drs. Budi Santoso"/></Field>
+                  <Field label="Nama Calon Administrator Sekolah" className="sm:col-span-2">
+                    <input className={inputClass} required value={form.namaAdmin} onChange={e => update('namaAdmin', e.target.value)} placeholder="Nama lengkap admin yang akan mengelola sistem sekolah"/>
+                    <span className="mt-1 block text-[11px] text-slate-500">Akun Administrator pertama akan dibuat untuk nama dan email ini setelah disetujui.</span>
+                  </Field>
                   <Field label="Nomor WhatsApp"><div className="relative"><span className="absolute inset-y-0 left-0 flex w-11 items-center justify-center border-r border-slate-200 text-slate-700"><Icon name="whatsapp" className="h-5 w-5"/></span><input className={`${inputClass} pl-[55px]`} required type="tel" inputMode="tel" value={form.whatsapp} onChange={e => update('whatsapp', e.target.value)} placeholder="Contoh: 081234567890"/></div></Field>
-                  <Field label="Email Aktif"><div className="relative"><span className="absolute inset-y-0 left-0 flex w-11 items-center justify-center border-r border-slate-200 text-slate-700"><Icon name="mail" className="h-5 w-5"/></span><input className={`${inputClass} pl-[55px]`} required type="email" value={form.email} onChange={e => update('email', e.target.value)} placeholder="Contoh: sekolah@domain.com"/></div></Field>
+                  <Field label="Email Aktif Calon Administrator"><div className="relative"><span className="absolute inset-y-0 left-0 flex w-11 items-center justify-center border-r border-slate-200 text-slate-700"><Icon name="mail" className="h-5 w-5"/></span><input className={`${inputClass} pl-[55px]`} required type="email" value={form.email} onChange={e => update('email', e.target.value)} placeholder="Contoh: admin@sekolah.sch.id"/></div></Field>
                 </div>
+              </div>
+              <div>
+                <div className="mb-3 flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#dcedff] to-[#e8f4ff] px-3 py-2 text-[16px] font-extrabold text-[#10275f]"><Icon name="shield" className="h-5 w-5 text-blue-600"/>Data Kepala Sekolah</div>
+                <div className="grid gap-3.5 sm:grid-cols-1">
+                  <Field label="Nama Kepala Sekolah"><input className={inputClass} required value={form.namaKepalaSekolah} onChange={e => update('namaKepalaSekolah', e.target.value)} placeholder="Contoh: Drs. H. Budi Santoso, M.Pd."/></Field>
+                </div>
+              </div>
+              <div>
+                <div className="mb-3 flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#dcedff] to-[#e8f4ff] px-3 py-2 text-[16px] font-extrabold text-[#10275f]"><Icon name="file" className="h-5 w-5 text-blue-600"/>Catatan Tambahan (Opsional)</div>
+                <Field label="Catatan Tambahan untuk Super Admin" required={false}><textarea rows={2} value={form.catatanPendaftar} onChange={e => update('catatanPendaftar', e.target.value)} placeholder="Tuliskan catatan khusus terkait sekolah Anda jika ada..." className="min-h-[60px] w-full resize-y rounded-[9px] border border-slate-300 bg-white px-3.5 py-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"/></Field>
               </div>
               <div className="rounded-xl border border-green-100 bg-gradient-to-r from-[#edf9ee] to-[#f1fbf0] p-4 text-[12px] leading-relaxed text-slate-800">
                 <div className="flex items-start gap-3"><Icon name="info" className="mt-0.5 h-6 w-6 shrink-0 text-green-600"/><div><h3 className="mb-1 text-[14px] font-extrabold text-slate-900">Penting untuk Diketahui:</h3><ul className="list-disc space-y-0.5 pl-4"><li>Persetujuan pendaftaran dilakukan secara manual.</li><li>Jika disetujui, Anda akan menerima email berisi 3 akun awal (Admin, Guru, dan Kepala Sekolah) serta panduan aktivasi.</li><li>Informasi penggunaan layanan akan disampaikan setelah akun diaktifkan.</li></ul></div></div>
@@ -211,7 +330,7 @@ export default function PendaftaranSekolah() {
                 </div>
               )}
               <div className="flex flex-col-reverse justify-center gap-3 pb-1 sm:flex-row sm:pt-1">
-                <button type="button" onClick={() => {setForm({namaSekolah:'',npsn:'',kabupaten:'',alamat:'',namaKepalaSekolah:'',whatsapp:'',email:''});setProvinsi('');setJenjang('');setSetuju(false);setPesan('');setTipePesan('info')}} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-7 text-[14px] font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">← Batal</button>
+                <button type="button" onClick={() => {setForm({namaSekolah:'',npsn:'',kabupaten:'',alamat:'',namaAdmin:'',namaKepalaSekolah:'',whatsapp:'',email:'',catatanPendaftar:''});setProvinsi('');setJenjang('');setSetuju(false);setPesan('');setTipePesan('info')}} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-7 text-[14px] font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">← Batal</button>
                 <button type="submit" disabled={!setuju || sedangMengirim} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0758cb] px-8 text-[14px] font-bold text-white shadow-[0_5px_12px_rgba(0,86,205,.2)] transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Icon name="send" className="h-4 w-4"/>{sedangMengirim ? 'Mengirim Pendaftaran...' : 'Kirim Pendaftaran'}</button>
               </div>
               {!npsnValid && form.npsn.length > 0 && <p className="text-center text-[11px] text-amber-700">NPSN harus terdiri dari 8 digit angka.</p>}

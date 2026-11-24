@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { httpsCallable, getFunctions } from 'firebase/functions';
-import { auth } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../lib/firebase';
 
 type ActivationRequest = {
   token: string;
@@ -16,9 +16,8 @@ type ActivationResponse = {
   message: string;
 };
 
-// Default: Firebase Functions online. Koneksi emulator kelak dikelola
-// terpusat lewat flag eksplisit (Tahap 4), tidak otomatis saat mode DEV.
-const functions = getFunctions(auth.app, 'us-central1');
+// Menggunakan instance functions terpusat dari ../lib/firebase
+// sehingga secara konsisten mengikuti mode emulator atau online.
 const activateAccount = httpsCallable<
   ActivationRequest,
   ActivationResponse

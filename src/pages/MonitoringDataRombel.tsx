@@ -1,7 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type RombelRecord = {
   id: string;
@@ -54,6 +54,7 @@ const tingkatRomawi = (value: unknown): string => {
 
 export default function MonitoringDataRombel() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [rombelList, setRombelList] = useState<RombelRecord[]>([]);
   const [guruList, setGuruList] = useState<GuruRecord[]>([]);
   const [tahunList, setTahunList] = useState<TahunAjaranRecord[]>([]);
@@ -98,8 +99,7 @@ export default function MonitoringDataRombel() {
     };
 
     const berhenti = [
-      onSnapshot(
-        collection(db, 'kelas'),
+      onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
         (snapshot) => {
           if (!masihAktif) return;
           setRombelList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as RombelRecord[]);
@@ -107,8 +107,7 @@ export default function MonitoringDataRombel() {
         },
         tanganiError('rombel', 'rombel')
       ),
-      onSnapshot(
-        collection(db, 'guru'),
+      onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId)),
         (snapshot) => {
           if (!masihAktif) return;
           setGuruList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as GuruRecord[]);
@@ -117,7 +116,7 @@ export default function MonitoringDataRombel() {
         tanganiError('data guru', 'guru')
       ),
       onSnapshot(
-        query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')),
+        query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')),
         (snapshot) => {
           if (!masihAktif) return;
           setTahunList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaranRecord[]);

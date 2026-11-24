@@ -1,6 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 type InventarisRow = { id: string; kodeInventaris: string; namaBarang: string; kategori: string; jumlah: number; satuan: string; kondisi: string; tahunPerolehan: string; lokasi: string; createdAt?: unknown };
@@ -38,6 +39,9 @@ function Icon({ name, className = 'h-5 w-5' }: { name: 'back' | 'download' | 'pr
 }
 
 export default function LaporanSarpras() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [inventaris, setInventaris] = useState<InventarisRow[]>([]);
   const [ruangan, setRuangan] = useState<RuangRow[]>([]);
   const [pemeliharaan, setPemeliharaan] = useState<PemeliharaanRow[]>([]);
@@ -51,15 +55,15 @@ export default function LaporanSarpras() {
   const [exportMessage, setExportMessage] = useState('');
 
   useEffect(() => {
-    const unsubInventory = onSnapshot(collection(db, 'inventaris_sarpras'), (snapshot) => {
+    const unsubInventory = onSnapshot(query(collection(db, 'inventaris_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       setInventaris(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as InventarisRow)));
       setLoadingInventory(false);
     }, (error) => { console.error('Gagal memuat laporan inventaris:', error); setErrors((old) => [...old.filter((x) => !x.startsWith('Inventaris:')), 'Inventaris: data tidak dapat dibaca. Periksa aturan Firestore.']); setLoadingInventory(false); });
-    const unsubRooms = onSnapshot(collection(db, 'ruang_fasilitas_sarpras'), (snapshot) => {
+    const unsubRooms = onSnapshot(query(collection(db, 'ruang_fasilitas_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       setRuangan(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as RuangRow)));
       setLoadingRooms(false);
     }, (error) => { console.error('Gagal memuat laporan ruang:', error); setErrors((old) => [...old.filter((x) => !x.startsWith('Ruang:')), 'Ruang: data tidak dapat dibaca. Periksa aturan Firestore.']); setLoadingRooms(false); });
-    const unsubMaintenance = onSnapshot(collection(db, 'pemeliharaan_sarpras'), (snapshot) => {
+    const unsubMaintenance = onSnapshot(query(collection(db, 'pemeliharaan_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       setPemeliharaan(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as PemeliharaanRow)));
       setLoadingMaintenance(false);
     }, (error) => { console.error('Gagal memuat laporan pemeliharaan:', error); setErrors((old) => [...old.filter((x) => !x.startsWith('Pemeliharaan:')), 'Pemeliharaan: data tidak dapat dibaca. Periksa aturan Firestore.']); setLoadingMaintenance(false); });

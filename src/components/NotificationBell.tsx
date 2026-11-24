@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,7 +13,6 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type Notifikasi = {
   id: string;

@@ -48,6 +48,38 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/**
+ * Sink email lokal khusus emulator.
+ * Saat berjalan di Functions Emulator, isi email disimpan di koleksi
+ * email_sink dan TIDAK dikirim ke layanan eksternal. Di produksi,
+ * perilaku pengiriman melalui Resend tetap sama seperti sebelumnya.
+ */
+const MODE_EMULATOR = process.env.FUNCTIONS_EMULATOR === "true";
+console.info(
+  MODE_EMULATOR ?
+    "[email] Sink lokal emulator aktif: email TIDAK dikirim ke layanan eksternal." :
+    "[email] Mode produksi: email dikirim melalui Resend.",
+);
+
+async function kirimEmail(opsi: {
+  from: string;
+  to: string[];
+  subject: string;
+  html: string;
+}) {
+  if (MODE_EMULATOR) {
+    const doc = await db.collection("email_sink").add({
+      ...opsi,
+      status: "tersimpan_lokal",
+      tujuan: "emulator",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return {data: {id: `sink-${doc.id}`}, error: null};
+  }
+  const resend = new Resend(resendApiKey.value());
+  return await resend.emails.send(opsi);
+}
+
 function createSchoolId(): string {
   return `SDK-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
@@ -86,6 +118,7 @@ export const kirimKonfirmasiPendaftaran = onDocumentCreated(
     const data = snapshot.data();
     const email = String(data.email || "").trim().toLowerCase();
     const namaSekolah = String(data.namaSekolah || "").trim();
+    const namaAdmin = String(data.namaAdmin || data.namaPendaftar || "").trim();
 
     if (!email || !namaSekolah) {
       await snapshot.ref.update({
@@ -98,16 +131,18 @@ export const kirimKonfirmasiPendaftaran = onDocumentCreated(
       return;
     }
 
-    const resend = new Resend(resendApiKey.value());
+    const salamPenerima = namaAdmin ?
+      `${namaAdmin} (Calon Administrator ${namaSekolah})` :
+      `Pengelola ${namaSekolah}`;
 
-    const {data: hasil, error} = await resend.emails.send({
+    const {data: hasil, error} = await kirimEmail({
       from: "Aplikasi Sekolah Digital <onboarding@resend.dev>",
       to: [email],
       subject: "Pendaftaran Sekolah Berhasil Diterima",
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.7;color:#1e293b">
           <h2 style="color:#0758cb">Pendaftaran Berhasil Diterima</h2>
-          <p>Yth. Pengelola ${escapeHtml(namaSekolah)},</p>
+          <p>Yth. ${escapeHtml(salamPenerima)},</p>
           <p>Terima kasih telah mendaftarkan sekolah Anda pada Aplikasi Sekolah Digital.</p>
           <p>Data pendaftaran telah kami terima dan sedang menunggu pemeriksaan oleh Super Admin.</p>
           <p>Informasi hasil verifikasi dan proses aktivasi akun akan dikirimkan melalui alamat email ini.</p>
@@ -140,6 +175,116 @@ export const kirimKonfirmasiPendaftaran = onDocumentCreated(
 );
 
 /**
+ * Pendaftaran sekolah baru oleh calon administrator sekolah.
+ * Memvalidasi data, mencegah duplikasi NPSN dan email,
+ * serta menyimpan permohonan dengan status menunggu_verifikasi.
+ */
+export const ajukanPendaftaranSekolah = onCall(async (request) => {
+  const namaSekolah = cleanText(request.data?.namaSekolah, 150);
+  const npsn = cleanText(request.data?.npsn, 8);
+  const jenjang = cleanText(request.data?.jenjang, 30);
+  const provinsi = cleanText(request.data?.provinsi, 80);
+  const kabupaten = cleanText(request.data?.kabupaten, 100);
+  const alamat = cleanText(request.data?.alamat, 500);
+  const namaAdmin = cleanText(request.data?.namaAdmin || request.data?.namaPendaftar, 120);
+  const namaKepalaSekolah = cleanText(request.data?.namaKepalaSekolah, 120);
+  const telepon = cleanText(request.data?.telepon || request.data?.whatsapp, 25);
+  const email = cleanText(request.data?.email, 254).toLowerCase();
+  const catatanPendaftar = cleanText(request.data?.catatanPendaftar, 1000);
+
+  if (namaSekolah.length < 3) {
+    throw new HttpsError("invalid-argument", "Nama sekolah minimal 3 karakter.");
+  }
+  if (!/^\d{8}$/.test(npsn)) {
+    throw new HttpsError("invalid-argument", "NPSN harus terdiri dari 8 digit angka.");
+  }
+  const jenjangList = ["PAUD", "TK", "SD", "SMP", "SMA", "SMK", "SLB", "Lainnya"];
+  if (!jenjangList.includes(jenjang)) {
+    throw new HttpsError("invalid-argument", "Jenjang pendidikan tidak valid.");
+  }
+  if (provinsi.length < 2) {
+    throw new HttpsError("invalid-argument", "Provinsi wajib dipilih.");
+  }
+  if (kabupaten.length < 2) {
+    throw new HttpsError("invalid-argument", "Kabupaten/Kota wajib diisi.");
+  }
+  if (alamat.length < 5) {
+    throw new HttpsError("invalid-argument", "Alamat sekolah minimal 5 karakter.");
+  }
+  if (namaAdmin.length < 2) {
+    throw new HttpsError("invalid-argument", "Nama calon administrator sekolah wajib diisi.");
+  }
+  if (namaKepalaSekolah.length < 2) {
+    throw new HttpsError("invalid-argument", "Nama kepala sekolah wajib diisi.");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpsError("invalid-argument", "Alamat email tidak valid.");
+  }
+  if (telepon.length < 8) {
+    throw new HttpsError("invalid-argument", "Nomor WhatsApp/telepon minimal 8 digit.");
+  }
+
+  // 1. Cek duplikasi di sekolah_platform
+  const existingSchoolSnap = await db.collection("sekolah_platform")
+    .where("npsn", "==", npsn)
+    .limit(1)
+    .get();
+
+  if (!existingSchoolSnap.empty) {
+    throw new HttpsError(
+      "already-exists",
+      `Sekolah dengan NPSN ${npsn} sudah terdaftar di sistem. Hubungi pengelola platform jika memerlukan bantuan.`,
+    );
+  }
+
+  // 2. Cek duplikasi di pendaftaran_sekolah yang aktif
+  const existingRegSnap = await db.collection("pendaftaran_sekolah")
+    .where("npsn", "==", npsn)
+    .get();
+
+  const activeStatuses = ["menunggu_verifikasi", "disetujui_menunggu_provisioning", "selesai"];
+  const activeDuplicate = existingRegSnap.docs.find((d) => activeStatuses.includes(d.data().status));
+
+  if (activeDuplicate) {
+    const dupStatus = activeDuplicate.data().status;
+    const keterangan = dupStatus === "menunggu_verifikasi" ?
+      "sedang menunggu verifikasi Super Admin" :
+      dupStatus === "disetujui_menunggu_provisioning" ?
+        "sudah disetujui dan menunggu aktivasi" :
+        "sudah selesai diproses";
+    throw new HttpsError(
+      "already-exists",
+      `Pendaftaran untuk NPSN ${npsn} sudah pernah diajukan (${keterangan}).`,
+    );
+  }
+
+  // 3. Simpan permohonan ke Firestore
+  const docRef = await db.collection("pendaftaran_sekolah").add({
+    namaSekolah,
+    npsn,
+    jenjang,
+    provinsi,
+    kabupaten,
+    alamat,
+    namaAdmin,
+    namaKepalaSekolah,
+    telepon,
+    email,
+    catatanPendaftar,
+    catatanAdmin: "",
+    status: "menunggu_verifikasi",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return {
+    success: true,
+    pendaftaranId: docRef.id,
+    message: "Pendaftaran sekolah berhasil diajukan dan sedang menunggu verifikasi Super Admin.",
+  };
+});
+
+/**
  * Dipanggil oleh tombol Setujui di Platform Control.
  * Membuat sekolah, tiga undangan, dan mengirim tautan aktivasi ke email kontak.
  */
@@ -163,13 +308,23 @@ export const setujuiPendaftaranSekolah = onCall(
     const registration = registrationSnapshot.data()!;
     const status = cleanText(registration.status);
     const existingSchoolId = cleanText(registration.sekolahId);
-    const isRetry = status === "disetujui_menunggu_provisioning" && Boolean(existingSchoolId);
+    const kirimUlang = request.data?.kirimUlang === true;
+    const isRetry = (status === "disetujui_menunggu_provisioning" || (status === "selesai" && kirimUlang)) &&
+      Boolean(existingSchoolId);
 
-    if (status === "selesai") {
+    if (status === "selesai" && !kirimUlang) {
       throw new HttpsError("already-exists", "Email aktivasi sudah berhasil dikirim untuk pendaftaran ini.");
     }
     if (status !== "menunggu_verifikasi" && !isRetry) {
       throw new HttpsError("failed-precondition", "Pendaftaran tidak berada pada status yang dapat diproses.");
+    }
+
+    if (!isRetry) {
+      const npsn = cleanText(registration.npsn, 8);
+      const existingSchoolSnap = await db.collection("sekolah_platform").where("npsn", "==", npsn).limit(1).get();
+      if (!existingSchoolSnap.empty) {
+        throw new HttpsError("already-exists", `Sekolah dengan NPSN ${npsn} sudah terdaftar di registri platform.`);
+      }
     }
 
     const baseUrl = appBaseUrl.value().replace(/\/+$/, "");
@@ -227,7 +382,9 @@ export const setujuiPendaftaranSekolah = onCall(
       }
 
       const freshData = freshRegistration.data()!;
-      const expectedStatus = isRetry ? "disetujui_menunggu_provisioning" : "menunggu_verifikasi";
+      const expectedStatus = isRetry ?
+        (freshData.status === "selesai" ? "selesai" : "disetujui_menunggu_provisioning") :
+        "menunggu_verifikasi";
       if (freshData.status !== expectedStatus || (isRetry && freshData.sekolahId !== schoolId)) {
         throw new HttpsError("failed-precondition", "Pendaftaran sudah diproses oleh pengguna lain.");
       }
@@ -243,6 +400,7 @@ export const setujuiPendaftaranSekolah = onCall(
           alamat: cleanText(registration.alamat, 500),
           email: emailKontak,
           telepon: cleanText(registration.telepon, 30),
+          namaAdmin: cleanText(registration.namaAdmin || registration.namaPendaftar, 120),
           namaKepalaSekolah: cleanText(registration.namaKepalaSekolah, 120),
           status: "nonaktif",
           statusLangganan: "belum_diatur",
@@ -290,15 +448,19 @@ export const setujuiPendaftaranSekolah = onCall(
       return `<li style="margin:12px 0"><strong>${label}</strong><br/><a href="${link}">Aktifkan akun ${label}</a><br/><span style="color:#64748b;font-size:12px">Kode akun: ${schoolId}-${invite.role}</span></li>`;
     }).join("");
 
-    const resend = new Resend(resendApiKey.value());
-    const {data: emailResult, error: emailError} = await resend.emails.send({
+    const namaAdmin = cleanText(registration.namaAdmin || registration.namaPendaftar);
+    const salamPenerima = namaAdmin ?
+      `${namaAdmin} / Pengelola ${namaSekolah}` :
+      `Pengelola ${namaSekolah}`;
+
+    const {data: emailResult, error: emailError} = await kirimEmail({
       from: "Aplikasi Sekolah Digital <onboarding@resend.dev>",
       to: [emailKontak],
       subject: `Pendaftaran ${namaSekolah} Disetujui – Aktivasi Akun`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.7;color:#1e293b;max-width:620px">
           <h2 style="color:#0758cb">Pendaftaran Sekolah Disetujui</h2>
-          <p>Yth. Pengelola ${escapeHtml(namaSekolah)},</p>
+          <p>Yth. ${escapeHtml(salamPenerima)},</p>
           <p>Pendaftaran sekolah Anda telah disetujui. Kode sekolah Anda adalah <strong>${schoolId}</strong>.</p>
           <p>Berikut tiga tautan aktivasi. Teruskan setiap tautan hanya kepada pengguna yang bersangkutan.</p>
           <ol>${invitationLinks}</ol>

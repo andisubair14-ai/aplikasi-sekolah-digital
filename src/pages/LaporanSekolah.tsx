@@ -1,8 +1,8 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type SchoolRecord = Record<string, unknown> & { id: string };
 type SourceKey =
@@ -110,6 +110,7 @@ const REPORT_CATEGORIES = [
 
 export default function LaporanSekolah() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const isAdmin = userData?.role === 'admin';
   const basePath = isAdmin ? '/admin' : '/kepsek';
   const [sources, setSources] = useState<Record<SourceKey, SourceState>>(buatSumberAwal);
@@ -117,8 +118,7 @@ export default function LaporanSekolah() {
 
   useEffect(() => {
     const unsubscribers = (Object.entries(COLLECTIONS) as [SourceKey, string][]).map(([key, collectionName]) =>
-      onSnapshot(
-        collection(db, collectionName),
+      onSnapshot(query(collection(db, collectionName), where('sekolahId', '==', sekolahId)),
         (snapshot) => {
           const rows = snapshot.docs.map((item) => ({ ...item.data(), id: item.id })) as SchoolRecord[];
           setSources((previous) => ({

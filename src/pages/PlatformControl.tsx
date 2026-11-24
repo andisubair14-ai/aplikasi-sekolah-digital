@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { auth, db } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '../lib/firebase';
 import gambarGedungSekolah from '../assets/gedung-sekolah.png';
 import gambarPetaIndonesia from '../assets/peta-indonesia.png';
 import gambarKarakterSuperAdmin from '../assets/karakter-super-admin.png';
@@ -238,10 +238,18 @@ type SchoolRegistration = {
   provinsi: string;
   kabupaten: string;
   alamat: string;
+  namaAdmin?: string;
   namaKepalaSekolah: string;
   email: string;
   telepon: string;
   status: RegistrationStatus;
+  sekolahId?: string;
+  emailAktivasi?: {
+    status?: string;
+    keterangan?: string;
+    resendId?: string;
+    dikirimPada?: any;
+  };
   catatanPendaftar: string;
   catatanAdmin: string;
   createdAt?: any;
@@ -299,10 +307,13 @@ export default function PlatformControl() {
           provinsi: String(data.provinsi || ''),
           kabupaten: String(data.kabupaten || ''),
           alamat: String(data.alamat || ''),
+          namaAdmin: String(data.namaAdmin || data.namaPendaftar || ''),
           namaKepalaSekolah: String(data.namaKepalaSekolah || ''),
           email: String(data.email || ''),
           telepon: String(data.telepon || ''),
           status: (allowed.includes(data.status) ? data.status : 'menunggu_verifikasi') as RegistrationStatus,
+          sekolahId: data.sekolahId ? String(data.sekolahId) : undefined,
+          emailAktivasi: data.emailAktivasi || undefined,
           catatanPendaftar: String(data.catatanPendaftar || ''),
           catatanAdmin: String(data.catatanAdmin || ''),
           createdAt: data.createdAt,
@@ -370,9 +381,8 @@ export default function PlatformControl() {
 
   try {
     if (status === 'disetujui_menunggu_provisioning') {
-      const functions = getFunctions(auth.app);
       const prosesPersetujuan = httpsCallable<
-        { pendaftaranId: string },
+        { pendaftaranId: string; kirimUlang?: boolean },
         { success: boolean; sekolahId: string }
       >(functions, 'setujuiPendaftaranSekolah');
 
@@ -407,6 +417,45 @@ export default function PlatformControl() {
       : 'Terjadi kesalahan yang tidak diketahui.';
 
     alert(`Proses belum berhasil:\n${pesan}`);
+  } finally {
+    setSavingRegistration(false);
+  }
+};
+
+const handleKirimUlangAktivasi = async (registration: SchoolRegistration) => {
+  if (savingRegistration) return;
+
+  const konfirmasi = window.confirm(
+    `Kirim ulang undangan aktivasi untuk ${registration.namaSekolah} (${registration.sekolahId || ''})?\n\n` +
+    'Token aktivasi baru akan dibuat dan dikirimkan ke alamat email kontak sekolah.'
+  );
+
+  if (!konfirmasi) return;
+
+  setSavingRegistration(true);
+
+  try {
+    const prosesPersetujuan = httpsCallable<
+      { pendaftaranId: string; kirimUlang?: boolean },
+      { success: boolean; sekolahId: string }
+    >(functions, 'setujuiPendaftaranSekolah');
+
+    const hasil = await prosesPersetujuan({
+      pendaftaranId: registration.id,
+      kirimUlang: true,
+    });
+
+    alert(
+      `Undangan aktivasi berhasil dikirim ulang!\n\n` +
+      `Kode Sekolah: ${hasil.data.sekolahId}\n` +
+      'Tautan aktivasi baru telah dikirimkan ke email kontak sekolah.'
+    );
+
+    setSelectedRegistration(null);
+  } catch (error) {
+    console.error('Gagal mengirim ulang aktivasi:', error);
+    const pesan = error instanceof Error ? error.message : 'Terjadi kesalahan sistem.';
+    alert(`Kirim ulang belum berhasil:\n${pesan}`);
   } finally {
     setSavingRegistration(false);
   }
@@ -903,7 +952,13 @@ export default function PlatformControl() {
                           <tr key={item.id} className="border-b border-slate-50 hover:bg-blue-50/40">
                             <td className="px-3 py-3"><p className="font-bold text-[#102B59]">{item.namaSekolah || 'Nama belum diisi'}</p><p className="mt-1 text-[10px] text-slate-400">{item.kabupaten}, {item.provinsi}</p></td>
                             <td className="px-3 py-3 font-mono text-slate-600">{item.npsn || '-'}</td>
-                            <td className="px-3 py-3"><p className="font-semibold text-slate-700">{item.namaKepalaSekolah || '-'}</p><p className="mt-1 text-[10px] text-slate-500">{item.email || '-'}</p></td>
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-slate-700">{item.namaAdmin || item.namaKepalaSekolah || '-'}</p>
+                              <p className="mt-0.5 text-[10px] text-slate-500">{item.email || '-'}</p>
+                              {item.namaAdmin && item.namaKepalaSekolah && item.namaAdmin !== item.namaKepalaSekolah && (
+                                <p className="text-[10px] text-slate-400">Kepsek: {item.namaKepalaSekolah}</p>
+                              )}
+                            </td>
                             <td className="px-3 py-3 text-slate-600">{formatRegistrationDate(item.createdAt)}</td>
                             <td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${item.status === 'menunggu_verifikasi' ? 'bg-amber-50 text-amber-700' : item.status === 'perlu_perbaikan' ? 'bg-orange-50 text-orange-700' : item.status === 'ditolak' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{registrationStatusLabel(item.status)}</span></td>
                             <td className="px-3 py-3 text-right"><button onClick={() => { setSelectedRegistration(item); setRegistrationNote(item.catatanAdmin || ''); setRegistrationAction(null); }} className="rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-bold text-white hover:bg-blue-700">Periksa</button></td>
@@ -926,8 +981,10 @@ export default function PlatformControl() {
                       {[
                         ['NPSN', selectedRegistration.npsn], ['Jenjang', selectedRegistration.jenjang],
                         ['Provinsi', selectedRegistration.provinsi], ['Kabupaten/Kota', selectedRegistration.kabupaten],
-                        ['Alamat Sekolah', selectedRegistration.alamat], ['Nama Kepala Sekolah', selectedRegistration.namaKepalaSekolah],
-                        ['Email Aktif', selectedRegistration.email], ['Nomor WhatsApp', selectedRegistration.telepon],
+                        ['Alamat Sekolah', selectedRegistration.alamat],
+                        ['Calon Administrator', selectedRegistration.namaAdmin || selectedRegistration.namaKepalaSekolah],
+                        ['Nama Kepala Sekolah', selectedRegistration.namaKepalaSekolah],
+                        ['Email Aktif (Admin)', selectedRegistration.email], ['Nomor WhatsApp', selectedRegistration.telepon],
                       ].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">{label}</p><p className="mt-1 break-words text-xs font-bold text-slate-700">{value || '-'}</p></div>)}
                     </div>
                     {selectedRegistration.catatanPendaftar && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3"><p className="text-[10px] font-bold text-blue-700">Catatan dari Pendaftar</p><p className="mt-1 whitespace-pre-wrap text-xs text-blue-900">{selectedRegistration.catatanPendaftar}</p></div>}
@@ -942,7 +999,29 @@ export default function PlatformControl() {
                       </>}
                       {registrationAction && <button disabled={savingRegistration || !registrationNote.trim()} onClick={() => saveRegistrationDecision(selectedRegistration, registrationAction === 'tolak' ? 'ditolak' : 'perlu_perbaikan', registrationNote)} className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{savingRegistration ? 'Menyimpan...' : 'Kirim Keputusan'}</button>}
                     </div>
-                    {selectedRegistration.status === 'disetujui_menunggu_provisioning' && <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-[11px] leading-relaxed text-emerald-800">Pendaftaran telah disetujui. Pembuatan registri sekolah, penyiapan tiga akun, dan pengiriman email aktivasi merupakan tahap backend berikutnya; belum dijalankan oleh tombol ini.</p>}
+                    {(selectedRegistration.status === 'disetujui_menunggu_provisioning' || selectedRegistration.status === 'selesai') && (
+                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">Status Aktivasi Sekolah</p>
+                            <p className="mt-1 text-sm font-bold text-emerald-950">
+                              Kode Sekolah: <span className="font-mono bg-white px-2 py-0.5 rounded border border-emerald-300 text-blue-700">{selectedRegistration.sekolahId || 'Dalam proses'}</span>
+                            </p>
+                            <p className="mt-1 text-xs text-emerald-800">
+                              Email Aktivasi: {selectedRegistration.emailAktivasi?.status === 'terkirim' ? '✓ Berhasil terkirim ke email kontak' : (selectedRegistration.emailAktivasi?.keterangan || 'Tautan aktivasi sudah dibuat')}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={savingRegistration}
+                            onClick={() => handleKirimUlangAktivasi(selectedRegistration)}
+                            className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50"
+                          >
+                            {savingRegistration ? 'Memproses...' : 'Kirim Ulang Undangan Aktivasi'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

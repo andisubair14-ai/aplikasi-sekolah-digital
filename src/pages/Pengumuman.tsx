@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   addDoc,
@@ -11,7 +12,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type Role = 'admin' | 'guru' | 'kepsek';
 type StatusPengumuman = 'Draft' | 'Terbit' | 'Arsip';
@@ -85,6 +85,7 @@ const statusClass = (status: StatusPengumuman) => {
 
 export default function Pengumuman() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const role = (userData?.role || 'guru') as Role;
   const uid = String(userData?.uid || '');
   const namaPengguna = String(userData?.nama || 'Pengguna');
@@ -109,8 +110,8 @@ export default function Pengumuman() {
     setErrorData('');
     const ref = collection(db, 'pengumuman_sekolah');
     const q = isAdmin || role === 'kepsek'
-      ? query(ref)
-      : query(ref, where('status', '==', 'Terbit'), where('sasaran', 'array-contains', 'guru'));
+      ? query(ref, where('sekolahId', '==', sekolahId))
+      : query(ref, where('sekolahId', '==', sekolahId), where('status', '==', 'Terbit'), where('sasaran', 'array-contains', 'guru'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const records = snapshot.docs.map((item) => ({
@@ -198,7 +199,7 @@ export default function Pengumuman() {
 
     setSaving(true);
     try {
-      const payload = {
+      const payload = { sekolahId,
         judul: form.judul.trim(),
         kategori: form.kategori,
         isi: form.isi.trim(),

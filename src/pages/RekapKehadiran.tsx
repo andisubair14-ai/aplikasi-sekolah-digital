@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import {
   collection,
@@ -9,7 +10,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type StatusAbsensi = 'Hadir' | 'Sakit' | 'Izin' | 'Alpa';
 
@@ -110,6 +110,7 @@ function pesanError(error: unknown) {
 
 export default function RekapKehadiran() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
 
   const [guruProfile, setGuruProfile] = useState<GuruProfile | null>(null);
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
@@ -174,8 +175,7 @@ export default function RekapKehadiran() {
       if (kelasReady && tahunReady && pengaturanReady) setLoadingMaster(false);
     };
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Kelas[]);
         kelasReady = true;
@@ -188,8 +188,7 @@ export default function RekapKehadiran() {
       }
     );
 
-    const unsubTahun = onSnapshot(
-      collection(db, 'tahun_ajaran'),
+    const unsubTahun = onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setTahunAjaranList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaran[]);
         tahunReady = true;
@@ -283,12 +282,10 @@ export default function RekapKehadiran() {
     setLoadingRekap(true);
     setErrorHalaman('');
 
-    const siswaQuery = query(
-      collection(db, 'siswa_ringkas'),
+    const siswaQuery = query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId),
       where('kelasId', '==', kelasTerpilih.id)
     );
-    const absensiQuery = query(
-      collection(db, 'absensi'),
+    const absensiQuery = query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId),
       where('kelasId', '==', kelasTerpilih.id),
       where('tanggal', '>=', tanggalMulai),
       where('tanggal', '<', tanggalAkhir)

@@ -28,4 +28,9 @@ dist
 .env
 .env.*
 !.env.example
+!.env.emulator
 /build-error.txt
+
+# Data Firebase Emulator (lokal, bukan produksi)
+emulator-data/*
+!emulator-data/.gitkeep

@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   collection,
@@ -10,7 +11,6 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type GuruRecord = {
   id: string;
@@ -109,6 +109,7 @@ const getStatusBadge = (status?: string) => {
 
 export default function JurnalMengajar() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
 
   const [guruProfile, setGuruProfile] = useState<GuruRecord | null>(null);
   const [kelasList, setKelasList] = useState<KelasRecord[]>([]);
@@ -213,8 +214,7 @@ export default function JurnalMengajar() {
       }
     );
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasRecord[]);
         kelasLoaded = true;
@@ -229,7 +229,7 @@ export default function JurnalMengajar() {
     );
 
     const unsubTahun = onSnapshot(
-      query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')),
+      query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')),
       (snapshot) => {
         setTahunAjaranList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaranRecord[]);
         tahunLoaded = true;
@@ -244,7 +244,7 @@ export default function JurnalMengajar() {
     );
 
     // guruId lama tetap memakai UID akun agar jurnal yang sudah ada tetap muncul.
-    const qJurnal = query(collection(db, 'jurnal'), where('guruId', '==', userData.uid));
+    const qJurnal = query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('guruId', '==', userData.uid));
     const unsubSekolah = onSnapshot(
       doc(db, 'pengaturan', 'sekolah'),
       (snapshot) => {
@@ -410,7 +410,7 @@ export default function JurnalMengajar() {
 
       try {
         const akunKepsekSnapshot = await getDocs(
-          query(collection(db, 'users'), where('role', '==', 'kepsek'))
+          query(collection(db, 'users'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('role', '==', 'kepsek'))
         );
 
         uidKepalaSekolah = akunKepsekSnapshot.docs
@@ -433,7 +433,7 @@ export default function JurnalMengajar() {
       if (editId) {
         batch.update(jurnalRef, dataJurnal);
       } else {
-        batch.set(jurnalRef, {
+        batch.set(jurnalRef, { sekolahId,
           ...dataJurnal,
           createdAt: sekarang,
         });
@@ -441,7 +441,7 @@ export default function JurnalMengajar() {
 
       uidKepalaSekolah.forEach((uidKepsek) => {
         const notifikasiRef = doc(collection(db, 'users', uidKepsek, 'notifikasi'));
-        batch.set(notifikasiRef, {
+        batch.set(notifikasiRef, { sekolahId,
           judul: 'Jurnal Baru Menunggu Persetujuan',
           pesan: `${guruProfile.nama || userData.nama || 'Guru'} mengirim jurnal ${tanggal} untuk kelas ${kelasTerpilih.namaKelas || '-'} (${mataPelajaran.trim()}). Mohon lakukan pemeriksaan.`,
           tipe: 'jurnal_dikirim',
@@ -505,7 +505,7 @@ export default function JurnalMengajar() {
       // Ambil akun Kepala Sekolah dan bersihkan notifikasi pengiriman jurnal
       // yang sama agar tidak meninggalkan pemberitahuan yang mengarah ke jurnal terhapus.
       const akunKepsekSnapshot = await getDocs(
-        query(collection(db, 'users'), where('role', '==', 'kepsek'))
+        query(collection(db, 'users'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('role', '==', 'kepsek'))
       );
 
       const batch = writeBatch(db);

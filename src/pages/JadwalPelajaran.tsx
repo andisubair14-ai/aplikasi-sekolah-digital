@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   collection,
@@ -11,7 +12,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type Hari = 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu';
 
@@ -91,6 +91,7 @@ const kelasLabel = (kelas: KelasRecord) =>
 
 export default function JadwalPelajaran() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const role = teks(userData?.role);
   const uid = teks(userData?.uid);
   const guruIdLogin = teks(userData?.guruId);
@@ -130,8 +131,8 @@ export default function JadwalPelajaran() {
     setErrorData('');
 
     const jadwalQuery = isGuru
-      ? query(collection(db, 'jadwal_pelajaran'), where('guruId', '==', guruIdLogin))
-      : collection(db, 'jadwal_pelajaran');
+      ? query(collection(db, 'jadwal_pelajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('guruId', '==', guruIdLogin))
+      : query(collection(db, 'jadwal_pelajaran'), where('sekolahId', '==', sekolahId));
 
     const unsubJadwal = onSnapshot(
       jadwalQuery,
@@ -159,7 +160,7 @@ export default function JadwalPelajaran() {
         masterSiap += 1;
         if (masterSiap >= 3) setLoadingMaster(false);
       };
-      unsubKelas = onSnapshot(collection(db, 'kelas'), (snapshot) => {
+      unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasRecord[]);
         masterSelesai();
       }, (error) => {
@@ -167,7 +168,7 @@ export default function JadwalPelajaran() {
         setErrorData('Data rombel tidak dapat dibaca. Periksa Firestore Rules.');
         masterSelesai();
       });
-      unsubGuru = onSnapshot(collection(db, 'guru'), (snapshot) => {
+      unsubGuru = onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
         setGuruList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as GuruRecord[]);
         masterSelesai();
       }, (error) => {
@@ -175,7 +176,7 @@ export default function JadwalPelajaran() {
         setErrorData('Data Guru tidak dapat dibaca. Periksa Firestore Rules.');
         masterSelesai();
       });
-      unsubTahun = onSnapshot(collection(db, 'tahun_ajaran'), (snapshot) => {
+      unsubTahun = onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
         setTahunList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunRecord[]);
         masterSelesai();
       }, (error) => {
@@ -280,6 +281,7 @@ export default function JadwalPelajaran() {
 
     const namaKelas = teks(kelas.namaKelas) || kelas.id;
     const dataJadwal = {
+      sekolahId,
       kelasId: kelas.id,
       namaKelas,
       jenjang: teks(kelas.jenjang),

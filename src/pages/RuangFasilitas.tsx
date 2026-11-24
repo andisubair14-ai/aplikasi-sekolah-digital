@@ -1,8 +1,8 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type KondisiRuang = 'Baik' | 'Perlu Perhatian' | 'Rusak';
 type StatusRuang = 'Aktif' | 'Tidak Aktif';
@@ -45,6 +45,7 @@ function Icon({ name, className = 'h-5 w-5' }: { name: 'back' | 'plus' | 'search
 
 export default function RuangFasilitas() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const isAdmin = userData?.role === 'admin';
   const [items, setItems] = useState<RuangItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,7 @@ export default function RuangFasilitas() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'ruang_fasilitas_sarpras'), (snapshot) => {
+    const unsubscribe = onSnapshot(query(collection(db, 'ruang_fasilitas_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as RuangItem));
       data.sort((a, b) => a.namaRuang.localeCompare(b.namaRuang, 'id'));
       setItems(data); setLoading(false); setLoadError('');
@@ -104,7 +105,7 @@ export default function RuangFasilitas() {
     if (!Number.isFinite(luas) || luas < 0 || luas > 100000) { setActionError('Luas ruang harus berupa angka yang valid.'); return; }
     setIsSaving(true);
     const uid = userData?.uid || '';
-    const payload = {
+    const payload = { sekolahId,
       namaRuang: form.namaRuang.trim(), jenisRuang: form.jenisRuang, lokasiGedung: form.lokasiGedung.trim(),
       kapasitas, luas, kondisi: form.kondisi, statusPenggunaan: form.statusPenggunaan,
       fasilitas: form.fasilitas.trim(), penanggungJawab: form.penanggungJawab.trim(), keterangan: form.keterangan.trim(),

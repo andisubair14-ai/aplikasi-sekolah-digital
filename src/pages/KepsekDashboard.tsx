@@ -1,9 +1,9 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import FotoProfilKepsek from '../components/FotoProfilKepsek';
 import ilustrasiGuruLakiLaki from '../assets/ilustrasi-guru-laki-laki.png';
 import ilustrasiGuruPerempuan from '../assets/ilustrasi-guru-perempuan.png';
-import { useAuth } from '../contexts/AuthContext';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -104,6 +104,7 @@ function StatIcon({ name }: { name: StatIconName }) {
 
 export default function KepsekDashboard() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const namaKepsek = userData?.nama || 'Kepala Sekolah';
   // Sama persis dengan Dashboard Guru: jenis kelamin dibaca dari userData AuthContext.
   const ilustrasiKepsek =
@@ -141,31 +142,31 @@ export default function KepsekDashboard() {
     };
 
     const unsubscribers = [
-      onSnapshot(collection(db, 'siswa'), (snap) => {
+      onSnapshot(query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setSiswaList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
         markReady('siswa');
       }, handleError('siswa', 'siswa')),
-      onSnapshot(collection(db, 'guru'), (snap) => {
+      onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setPegawaiList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
         markReady('pegawai');
       }, handleError('pegawai', 'pegawai')),
-      onSnapshot(collection(db, 'kelas'), (snap) => {
+      onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setKelasList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as ClassRow[]);
         markReady('kelas');
       }, handleError('kelas', 'kelas')),
-      onSnapshot(query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')), (snap) => {
+      onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')), (snap) => {
         setTahunList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as YearRow[]);
         markReady('tahun');
       }, handleError('tahun ajaran', 'tahun')),
       onSnapshot(
-        query(collection(db, 'absensi'), where('tanggal', '>=', weekStart), where('tanggal', '<=', today)),
+        query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('tanggal', '>=', weekStart), where('tanggal', '<=', today)),
         (snap) => {
           setAbsensiList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as DashboardRow[]);
           markReady('absensi');
         },
         handleError('absensi', 'absensi')
       ),
-      onSnapshot(collection(db, 'jurnal'), (snap) => {
+      onSnapshot(query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snap) => {
         setJurnalList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as JournalRow[]);
         markReady('jurnal');
       }, handleError('jurnal', 'jurnal'))

@@ -1,7 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type GuruRecord = {
   id: string;
@@ -59,6 +59,7 @@ const jabatanOptions = [
 
 export default function MonitoringDataGuru() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [guruList, setGuruList] = useState<GuruRecord[]>([]);
   const [kelasList, setKelasList] = useState<KelasRecord[]>([]);
   const [tahunList, setTahunList] = useState<TahunAjaranRecord[]>([]);
@@ -73,8 +74,7 @@ export default function MonitoringDataGuru() {
   const [selectedGuru, setSelectedGuru] = useState<GuruRecord | null>(null);
 
   useEffect(() => {
-    const unsubGuru = onSnapshot(
-      collection(db, 'guru'),
+    const unsubGuru = onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setGuruList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as GuruRecord[]);
         setLoadingGuru(false);
@@ -87,8 +87,7 @@ export default function MonitoringDataGuru() {
       },
     );
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasRecord[]),
       (err) => {
         console.error('Gagal memuat data rombel:', err);
@@ -97,7 +96,7 @@ export default function MonitoringDataGuru() {
     );
 
     const unsubTahun = onSnapshot(
-      query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')),
+      query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')),
       (snapshot) => {
         setTahunList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaranRecord[]);
         setLoadingMaster(false);

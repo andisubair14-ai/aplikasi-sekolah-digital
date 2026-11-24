@@ -1,13 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import {
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
-import { useAuth } from '../contexts/AuthContext';
+import { deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import FotoProfilKepsek from '../components/FotoProfilKepsek';
 
@@ -141,6 +135,7 @@ function KartuInfo({
 
 export default function ProfilKepsek() {
   const { user, userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [sekolah, setSekolah] = useState<SekolahProfile | null>(null);
   const [loadingSekolah, setLoadingSekolah] = useState(true);
   const [errorSekolah, setErrorSekolah] = useState('');
@@ -231,7 +226,7 @@ export default function ProfilKepsek() {
     try {
       const fotoDataUrl = await kompresFoto(fileFoto);
 
-      await setDoc(doc(db, 'foto_profil_kepsek', user.uid), {
+      await setDoc(doc(db, 'foto_profil_kepsek', user.uid), { sekolahId,
         fotoDataUrl,
         contentType: 'image/jpeg',
         updatedAt: serverTimestamp(),

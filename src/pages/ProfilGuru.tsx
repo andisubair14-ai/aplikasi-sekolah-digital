@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import FotoProfilGuru from '../components/FotoProfilGuru';
 
@@ -130,6 +130,7 @@ function BarisInfo({
 
 export default function ProfilGuru() {
   const { user, userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const guruId = userData?.guruId || '';
 
   const [guru, setGuru] = useState<GuruProfile | null>(null);
@@ -186,8 +187,7 @@ export default function ProfilGuru() {
 
   useEffect(() => {
     setLoadingKelas(true);
-    const berhenti = onSnapshot(
-      collection(db, 'kelas'),
+    const berhenti = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasProfile[]);
         setErrorKelas('');
@@ -242,7 +242,7 @@ export default function ProfilGuru() {
 
     try {
       const fotoDataUrl = await kompresFotoMenjadiDataUrl(fileFoto);
-      await setDoc(doc(db, 'foto_profil_guru', user.uid), {
+      await setDoc(doc(db, 'foto_profil_guru', user.uid), { sekolahId,
         fotoDataUrl,
         contentType: 'image/jpeg',
         updatedAt: serverTimestamp(),

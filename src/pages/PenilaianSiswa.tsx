@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   collection,
@@ -12,7 +13,6 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type KelasRecord = {
   id: string;
@@ -140,6 +140,7 @@ const buatFormAwal = (tahun?: string, semester?: string): FormPenilaian => ({
 
 export default function PenilaianSiswa() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const uid = teks(userData?.uid);
   const guruId = teks(userData?.guruId);
   const isGuru = userData?.role === 'guru';
@@ -195,8 +196,7 @@ export default function PenilaianSiswa() {
       }
     );
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasRecord[]);
         tandaiSiap();
@@ -209,7 +209,7 @@ export default function PenilaianSiswa() {
     );
 
     const unsubTahun = onSnapshot(
-      query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')),
+      query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')),
       (snapshot) => {
         setTahunList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaranRecord[]);
         tandaiSiap();
@@ -222,7 +222,7 @@ export default function PenilaianSiswa() {
     );
 
     const unsubJadwal = onSnapshot(
-      query(collection(db, 'jadwal_pelajaran'), where('guruId', '==', guruId)),
+      query(collection(db, 'jadwal_pelajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('guruId', '==', guruId)),
       (snapshot) => {
         setJadwalList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as JadwalRecord[]);
         tandaiSiap();
@@ -235,7 +235,7 @@ export default function PenilaianSiswa() {
     );
 
     const unsubPenilaian = onSnapshot(
-      query(collection(db, 'penilaian_siswa'), where('userId', '==', uid)),
+      query(collection(db, 'penilaian_siswa'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('userId', '==', uid)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as PenilaianRecord[];
         data.sort((a, b) => teks(b.tanggal).localeCompare(teks(a.tanggal)));
@@ -352,6 +352,7 @@ export default function PenilaianSiswa() {
     try {
       const ref = doc(collection(db, 'penilaian_siswa'));
       await setDoc(ref, {
+        sekolahId,
         judulPenilaian: form.judulPenilaian.trim(),
         jenisPenilaian: form.jenisPenilaian,
         kelasId: kelas.id,
@@ -392,8 +393,8 @@ export default function PenilaianSiswa() {
     setNilaiTersimpan({});
     try {
       const [siswaSnapshot, nilaiSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'siswa_ringkas'), where('kelasId', '==', item.kelasId))),
-        getDocs(collection(db, 'penilaian_siswa', item.id, 'nilai')),
+        getDocs(query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('kelasId', '==', item.kelasId))),
+        getDocs(query(collection(db, 'penilaian_siswa', item.id, 'nilai'), where('sekolahId', '==', sekolahId))),
       ]);
 
       const siswa = siswaSnapshot.docs
@@ -405,7 +406,7 @@ export default function PenilaianSiswa() {
       const tersimpan: Record<string, NilaiRecord> = {};
       const isian: Record<string, IsianNilai> = {};
       nilaiSnapshot.docs.forEach((nilaiDoc) => {
-        const data = { id: nilaiDoc.id, ...nilaiDoc.data() } as NilaiRecord;
+        const data = { sekolahId, id: nilaiDoc.id, ...nilaiDoc.data() } as NilaiRecord;
         tersimpan[nilaiDoc.id] = data;
       });
       siswa.forEach((siswaItem) => {
@@ -462,6 +463,7 @@ export default function PenilaianSiswa() {
           siswaId: siswa.id,
           isHapus: false,
           data: {
+            sekolahId,
             siswaId: siswa.id,
             namaSiswa: teks(siswa.nama),
             kelasId: teks(penilaianTerpilih.kelasId),
@@ -503,7 +505,7 @@ export default function PenilaianSiswa() {
     const yakin = window.confirm(`Hapus penilaian "${item.judulPenilaian || 'tanpa judul'}" beserta seluruh nilai siswanya? Tindakan ini tidak dapat dibatalkan.`);
     if (!yakin) return;
     try {
-      const nilaiSnapshot = await getDocs(collection(db, 'penilaian_siswa', item.id, 'nilai'));
+      const nilaiSnapshot = await getDocs(query(collection(db, 'penilaian_siswa', item.id, 'nilai'), where('sekolahId', '==', sekolahId)));
       for (let index = 0; index < nilaiSnapshot.docs.length; index += 400) {
         const batch = writeBatch(db);
         nilaiSnapshot.docs.slice(index, index + 400).forEach((nilaiDoc) => batch.delete(nilaiDoc.ref));

@@ -1,9 +1,9 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type Row = Record<string, any> & { id: string };
 type Column = { key: string; label: string };
@@ -121,6 +121,7 @@ function Icon({ name }: { name: 'back' | 'print' | 'download' | 'search' | 'cale
 export default function LaporanDetail() {
   const { jenis } = useParams<{ jenis: string }>();
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const reportType = (jenis && jenis in CONFIG ? jenis : 'data-siswa') as ReportType;
   const config = CONFIG[reportType];
   const isAdmin = userData?.role === 'admin';
@@ -145,7 +146,7 @@ export default function LaporanDetail() {
   useEffect(() => {
     setSources(Object.fromEntries(config.sources.map((name) => [name, { rows: null, loading: true, error: '' }])));
     const unsubscribers = config.sources.map((name) => onSnapshot(
-      name === 'tahun_ajaran' ? query(collection(db, name), where('status', '==', 'Aktif')) : collection(db, name),
+      name === 'tahun_ajaran' ? query(collection(db, name), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')) : query(collection(db, name), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const rows = snapshot.docs.map((item) => ({ ...item.data(), id: item.id })) as Row[];
         setSources((previous) => ({ ...previous, [name]: { rows, loading: false, error: '' } }));

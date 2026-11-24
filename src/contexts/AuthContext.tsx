@@ -29,6 +29,7 @@ interface UserData {
   nama: string;
   role: RoleType;
   guruId: string | null;
+  sekolahId: string | null;
   jenisKelamin: JenisKelamin;
   aktif: boolean;
 }
@@ -162,6 +163,9 @@ const profilRef = doc(db, 'users', currentUser.uid);
             nama: typeof data.nama === 'string' ? data.nama : '',
             role,
             guruId,
+            sekolahId: typeof data.sekolahId === 'string' && data.sekolahId.trim() !== ''
+              ? data.sekolahId
+              : null,
             jenisKelamin: null,
             aktif: typeof data.aktif === 'boolean' ? data.aktif : true
           };
@@ -241,8 +245,8 @@ const profilRef = doc(db, 'users', currentUser.uid);
           // =========================================
 
           if (role === 'kepsek') {
-            const pegawaiKepsekQuery = query(
-              collection(db, 'guru'),
+            const pegawaiKepsekQuery = query(collection(db, 'guru'),
+              where('sekolahId', '==', typeof data.sekolahId === 'string' ? data.sekolahId : ''),
               where('jabatan', '==', 'Kepala Sekolah')
             );
 

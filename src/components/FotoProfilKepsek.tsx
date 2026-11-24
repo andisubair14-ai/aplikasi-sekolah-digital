@@ -13,6 +13,7 @@ interface FotoProfilKepsekProps {
 export default function FotoProfilKepsek({
   uid, nama, className = 'h-20 w-20', previewUrl,
 }: FotoProfilKepsekProps) {
+
   const [fotoTersimpan, setFotoTersimpan] = useState<string | null>(null);
 
   useEffect(() => {

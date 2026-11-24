@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// =========================================
+// STORAGE RULES — DEFAULT TOLAK
+// =========================================
+// Aplikasi belum memakai Firebase Storage untuk fitur apa pun.
+// Rules ini menutup semua akses sampai fitur Storage dirancang.
+// File ini dipakai emulator dan deploy eksplisit; tidak mengubah
+// apa pun yang terpasang online secara otomatis.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

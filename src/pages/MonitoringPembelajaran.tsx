@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useEffect, useMemo, useState } from 'react';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 type JurnalRecord = {
   id: string;
@@ -67,6 +67,7 @@ const nilai = (value?: string | number | null) => {
 
 export default function MonitoringPembelajaran() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [jurnalList, setJurnalList] = useState<JurnalRecord[]>([]);
   const [identitasSekolah, setIdentitasSekolah] = useState<IdentitasSekolah>({});
   const [loading, setLoading] = useState(true);
@@ -89,8 +90,7 @@ export default function MonitoringPembelajaran() {
     setLoading(true);
     setErrorData('');
 
-    const unsubscribeJurnal = onSnapshot(
-      collection(db, 'jurnal'),
+    const unsubscribeJurnal = onSnapshot(query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,

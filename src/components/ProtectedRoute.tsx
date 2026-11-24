@@ -1,8 +1,8 @@
+import { useAuth } from '../contexts/AuthContext';
 
 import { useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../lib/firebase';
 
 type RoleType = 'admin' | 'guru' | 'kepsek';

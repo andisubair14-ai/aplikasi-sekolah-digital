@@ -1,8 +1,8 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type StatusPemeliharaan = 'Dilaporkan' | 'Dijadwalkan' | 'Dalam Proses' | 'Selesai' | 'Tidak Dapat Diperbaiki';
 type Prioritas = 'Rendah' | 'Sedang' | 'Tinggi' | 'Darurat';
@@ -44,6 +44,7 @@ function formatTanggal(value?: string) {
 
 export default function PemeliharaanPerbaikan() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const isAdmin = userData?.role === 'admin';
   const [items, setItems] = useState<PemeliharaanItem[]>([]);
   const [assets, setAssets] = useState<AssetOption[]>([]);
@@ -59,13 +60,13 @@ export default function PemeliharaanPerbaikan() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const unsubscribeItems = onSnapshot(collection(db, 'pemeliharaan_sarpras'), (snapshot) => {
+    const unsubscribeItems = onSnapshot(query(collection(db, 'pemeliharaan_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as PemeliharaanItem));
       data.sort((a, b) => (b.tanggalLaporan || '').localeCompare(a.tanggalLaporan || ''));
       setItems(data); setLoading(false); setLoadError('');
     }, (error) => { console.error('Gagal membaca pemeliharaan:', error); setLoadError('Data pemeliharaan belum dapat dibaca. Periksa aturan akses Firestore.'); setLoading(false); });
 
-    const unsubscribeInventory = onSnapshot(collection(db, 'inventaris_sarpras'), (snapshot) => {
+    const unsubscribeInventory = onSnapshot(query(collection(db, 'inventaris_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       const inventory = snapshot.docs.map((item) => {
         const data = item.data();
         return { id: item.id, label: `${data.namaBarang || 'Barang'} · ${data.kodeInventaris || item.id}`, kind: 'Inventaris' as const, nama: String(data.namaBarang || ''), lokasi: String(data.lokasi || '') };
@@ -73,7 +74,7 @@ export default function PemeliharaanPerbaikan() {
       setAssets((previous) => [...inventory, ...previous.filter((asset) => asset.kind === 'Ruang/Fasilitas')]);
     }, (error) => console.error('Gagal membaca referensi inventaris:', error));
 
-    const unsubscribeRooms = onSnapshot(collection(db, 'ruang_fasilitas_sarpras'), (snapshot) => {
+    const unsubscribeRooms = onSnapshot(query(collection(db, 'ruang_fasilitas_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
       const rooms = snapshot.docs.map((item) => {
         const data = item.data();
         return { id: item.id, label: `${data.namaRuang || 'Ruang'} · ${data.kodeRuang || item.id}`, kind: 'Ruang/Fasilitas' as const, nama: String(data.namaRuang || ''), lokasi: String(data.lokasiGedung || '') };
@@ -118,7 +119,7 @@ export default function PemeliharaanPerbaikan() {
     if (form.tanggalSelesai && form.tanggalSelesai < form.tanggalLaporan) { setActionError('Tanggal selesai tidak boleh lebih awal dari tanggal laporan.'); return; }
     setIsSaving(true);
     const uid = userData?.uid || '';
-    const payload = {
+    const payload = { sekolahId,
       jenisAset: form.jenisAset, assetId: form.assetId, namaAset: form.namaAset.trim(), lokasi: form.lokasi.trim(),
       kategoriKerusakan: form.kategoriKerusakan, uraian: form.uraian.trim(), prioritas: form.prioritas, status: form.status,
       tanggalLaporan: form.tanggalLaporan, biaya, tindakan: form.tindakan.trim(), pelaksana: form.pelaksana.trim(),

@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   collection,
@@ -12,7 +13,6 @@ import type { Unsubscribe } from 'firebase/firestore';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
  type StatusAbsensi = 'Hadir' | 'Sakit' | 'Izin' | 'Alpa';
  type TabAbsensi = 'manual' | 'scan' | 'kartu';
@@ -81,8 +81,10 @@ const labelKelas = (kelas: Kelas) =>
 const siswaMasihAktif = (siswa: Siswa) =>
   !['Lulus', 'Pindah Keluar'].includes(String(siswa.status || 'Aktif'));
 
-const idDokumenAbsensi = (tanggal: string, nisn: string) =>
-  `${tanggal}_${nisn.trim()}`;
+// Data siswa lama bisa saja tidak memiliki NISN. Fallback ke ID dokumen
+// siswa mencegah TypeError .trim() pada undefined dan tabrakan ID absensi.
+const idDokumenAbsensi = (tanggal: string, nisn: unknown) =>
+  `${String(tanggal ?? '').trim()}_${String(nisn ?? '').trim()}`;
 
 const potong = <T,>(items: T[], size: number): T[][] => {
   const hasil: T[][] = [];
@@ -92,6 +94,7 @@ const potong = <T,>(items: T[], size: number): T[][] => {
 
 export default function Absensi() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const isAdmin = userData?.role === 'admin';
   const isGuru = userData?.role === 'guru';
   const isKepsek = userData?.role === 'kepsek';
@@ -154,8 +157,7 @@ export default function Absensi() {
 
     // Admin dan Kepala Sekolah dapat membaca daftar rombel sekolah.
     if (!isGuru) {
-      const unsubKelas = onSnapshot(
-        collection(db, 'kelas'),
+      const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
         (snapshot) => {
           if (!masihAktif) return;
           setKelasList(
@@ -212,8 +214,7 @@ export default function Absensi() {
       };
 
       const unsubKelasWali = onSnapshot(
-        query(
-          collection(db, 'kelas'),
+        query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId),
           where('waliKelasId', '==', guruProfile.id)
         ),
         (snapshot) => {
@@ -266,8 +267,8 @@ export default function Absensi() {
     }
 
     const queryTahunAjaran = isAdmin
-      ? collection(db, 'tahun_ajaran')
-      : query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif'));
+      ? query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId))
+      : query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif'));
 
     const unsubTahun = onSnapshot(
       queryTahunAjaran,
@@ -407,8 +408,7 @@ export default function Absensi() {
     }
 
     setLoadingSiswa(true);
-    const unsub = onSnapshot(
-      collection(db, 'siswa'),
+    const unsub = onSnapshot(query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setSiswaList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Siswa[]);
         setLoadingSiswa(false);
@@ -440,7 +440,7 @@ export default function Absensi() {
     
 
     kelompok.forEach((idKelompok, index) => {
-      const q = query(collection(db, 'siswa_ringkas'), where('kelasId', 'in', idKelompok));
+      const q = query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('kelasId', 'in', idKelompok));
       const unsub = onSnapshot(
         q,
         (snapshot) => {
@@ -509,13 +509,11 @@ export default function Absensi() {
     // Admin/Kepala Sekolah tetap dapat melihat catatan tanggal tersebut,
     // termasuk catatan lama yang belum memiliki kelasId.
     const qAbsensi = isGuru
-      ? query(
-          collection(db, 'absensi'),
+      ? query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId),
           where('kelasId', '==', kelasTerpilih.id),
           where('tanggal', '==', selectedTanggal)
         )
-      : query(
-          collection(db, 'absensi'),
+      : query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId),
           where('tanggal', '==', selectedTanggal)
         );
 
@@ -552,7 +550,7 @@ export default function Absensi() {
     const total = siswaDiKelas.length;
     // Hitung hanya status siswa yang saat ini berada di rombel terpilih.
     const nilai = siswaDiKelas
-      .map((siswa) => absensiHariIni[siswa.nisn])
+      .map((siswa) => absensiHariIni[String(siswa.nisn || siswa.id)])
       .filter((status): status is StatusAbsensi => Boolean(status));
     const hadir = nilai.filter((item) => item === 'Hadir').length;
     const sakit = nilai.filter((item) => item === 'Sakit').length;
@@ -568,13 +566,13 @@ export default function Absensi() {
     if (!kelasTerpilih) throw new Error('Pilih rombel terlebih dahulu.');
     if (!siswa.nisn) throw new Error('NISN siswa tidak tersedia.');
 
-    const ref = doc(db, 'absensi', idDokumenAbsensi(selectedTanggal, siswa.nisn));
+    const ref = doc(db, 'absensi', idDokumenAbsensi(selectedTanggal, siswa.nisn || siswa.id));
     const sekarang = new Date().toISOString();
     // Penyimpanan menggunakan batch Firestore agar format rekaman konsisten.
     const batch = writeBatch(db);
-    batch.set(ref, {
+    batch.set(ref, { sekolahId,
       tanggal: selectedTanggal,
-      nisn: siswa.nisn,
+      nisn: String(siswa.nisn || siswa.id || ''),
       namaSiswa: siswa.nama || '',
       kelas: kelasTerpilih.namaKelas,
       kelasId: kelasTerpilih.id,
@@ -606,7 +604,7 @@ export default function Absensi() {
     setAbsensiHariIni((sebelumnya) => {
       const berikutnya = { ...sebelumnya };
       siswaDiKelas.forEach((siswa) => {
-        if (!berikutnya[siswa.nisn]) berikutnya[siswa.nisn] = 'Hadir';
+        if (!berikutnya[String(siswa.nisn || siswa.id)]) berikutnya[String(siswa.nisn || siswa.id)] = 'Hadir';
       });
       return berikutnya;
     });
@@ -617,7 +615,7 @@ export default function Absensi() {
     if (!kelasTerpilih) return alert('Pilih rombel terlebih dahulu.');
     if (siswaDiKelas.length === 0) return alert('Tidak ada siswa aktif pada rombel ini.');
 
-    const dataUntukDisimpan = siswaDiKelas.filter((siswa) => Boolean(absensiHariIni[siswa.nisn]));
+    const dataUntukDisimpan = siswaDiKelas.filter((siswa) => Boolean(absensiHariIni[String(siswa.nisn || siswa.id)]));
     if (dataUntukDisimpan.length === 0) return alert('Belum ada status kehadiran yang dipilih.');
 
     setIsSaving(true);
@@ -627,12 +625,12 @@ export default function Absensi() {
         const batch = writeBatch(db);
         const sekarang = new Date().toISOString();
         kelompok.forEach((siswa) => {
-          const status = absensiHariIni[siswa.nisn];
+          const status = absensiHariIni[String(siswa.nisn || siswa.id)];
           if (!status) return;
-          const ref = doc(db, 'absensi', idDokumenAbsensi(selectedTanggal, siswa.nisn));
-          batch.set(ref, {
+          const ref = doc(db, 'absensi', idDokumenAbsensi(selectedTanggal, siswa.nisn || siswa.id));
+          batch.set(ref, { sekolahId,
             tanggal: selectedTanggal,
-            nisn: siswa.nisn,
+            nisn: String(siswa.nisn || siswa.id || ''),
             namaSiswa: siswa.nama || '',
             kelas: kelasTerpilih.namaKelas,
             kelasId: kelasTerpilih.id,
@@ -681,7 +679,7 @@ export default function Absensi() {
 
     try {
       await simpanSatuAbsensi(siswa, 'Hadir', 'Scan QR');
-      setAbsensiHariIni((sebelumnya) => ({ ...sebelumnya, [siswa.nisn]: 'Hadir' }));
+      setAbsensiHariIni((sebelumnya) => ({ ...sebelumnya, [String(siswa.nisn || siswa.id)]: 'Hadir' }));
       setScanMessage(`${siswa.nama} berhasil dicatat Hadir.`);
       setScanError('');
     } catch (error) {
@@ -960,7 +958,7 @@ export default function Absensi() {
                   </thead>
                   <tbody>
                     {siswaDiKelas.map((siswa, index) => {
-                      const currentStatus = absensiHariIni[siswa.nisn] || '';
+                      const currentStatus = absensiHariIni[String(siswa.nisn || siswa.id)] || '';
                       return (
                         <tr key={siswa.id} className="border-b border-slate-100 hover:bg-slate-50 text-sm">
                           <td className="p-3 text-slate-500">{index + 1}</td>
@@ -972,7 +970,7 @@ export default function Absensi() {
                                 type="button"
                                 disabled={!bolehMengubah}
                                 aria-label={`${siswa.nama}: ${status}`}
-                                onClick={() => handleStatusChange(siswa.nisn, status)}
+                                onClick={() => handleStatusChange(String(siswa.nisn || siswa.id), status)}
                                 className={`w-9 h-9 rounded-lg font-bold transition-all disabled:cursor-not-allowed ${
                                   currentStatus === status
                                     ? status === 'Hadir' ? 'bg-emerald-500 text-white shadow-md'

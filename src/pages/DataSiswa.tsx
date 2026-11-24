@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 
 import {
   useState,
@@ -15,12 +16,12 @@ import {
   
   writeBatch,
   getDoc,
+  getDocs,
   query,
   where
 } from 'firebase/firestore';
 
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 
@@ -164,6 +165,7 @@ const buatDataRingkas = (
   siswa: any,
   kelas: Kelas
 ) => ({
+  sekolahId: siswa.sekolahId || '',
   nama: siswa.nama || '',
   nisn: siswa.nisn || '',
   kelas: kelas.namaKelas || '',
@@ -188,6 +190,7 @@ const buatDataRingkas = (
 
 export default function DataSiswa() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
 
   const isAdmin = userData?.role === 'admin';
   const isKepsek = userData?.role === 'kepsek';
@@ -297,8 +300,7 @@ export default function DataSiswa() {
       }
     };
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -318,8 +320,8 @@ export default function DataSiswa() {
     );
 
     const queryTahunAjaran = isAdmin
-      ? collection(db, 'tahun_ajaran')
-      : query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif'));
+      ? query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId))
+      : query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif'));
 
     const unsubTahun = onSnapshot(
       queryTahunAjaran,
@@ -391,8 +393,7 @@ export default function DataSiswa() {
     setFullLoading(true);
     setLoadError('');
 
-    const unsubSiswa = onSnapshot(
-      collection(db, 'siswa'),
+    const unsubSiswa = onSnapshot(query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -604,8 +605,7 @@ const kelasDiizinkan = useMemo(() => {
     let terjadiError = false;
 
     kelompokKelas.forEach((kelompok, index) => {
-      const q = query(
-        collection(db, 'siswa_ringkas'),
+      const q = query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId),
         where('kelasId', 'in', kelompok)
       );
 
@@ -1270,6 +1270,31 @@ const kelasDiizinkan = useMemo(() => {
           throw new Error('File Excel kosong.');
         }
 
+        // Cegah duplikasi NISN di sekolah yang sama, termasuk NISN yang
+        // sudah terdaftar sebelumnya di Firestore.
+        const siswaAda = await getDocs(
+          query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId))
+        );
+        const nisnTerdaftar = new Set(
+          siswaAda.docs
+            .map((item) => String(item.data().nisn || '').trim())
+            .filter(Boolean)
+        );
+        const nisnDuplikat: string[] = [];
+        jsonData.forEach((row, index) => {
+          const nisnBaris = String(row.NISN || '').trim();
+          if (!nisnBaris || nisnBaris === '-') return;
+          if (nisnTerdaftar.has(nisnBaris)) {
+            nisnDuplikat.push(`baris ${index + 2} (NISN ${nisnBaris})`);
+          }
+          nisnTerdaftar.add(nisnBaris);
+        });
+        if (nisnDuplikat.length > 0) {
+          throw new Error(
+            `NISN sudah terdaftar: ${nisnDuplikat.join(', ')}. Perbaiki file sebelum mengimpor ulang.`
+          );
+        }
+
         // Validasi seluruh kelas terlebih dahulu.
         // Nama rombel dan tahun ajaran harus cocok secara unik.
         const dataSiapSimpan = jsonData.map((row, index) => {
@@ -1302,6 +1327,7 @@ const kelasDiizinkan = useMemo(() => {
           }
 
           const siswa = bersihkanUndefined({
+            sekolahId,
             nama: String(row.Nama || '-').trim(),
             nisn: String(row.NISN || '-').trim(),
             tempatLahir: row['Tempat Lahir'] || '',
@@ -1571,6 +1597,7 @@ const kelasDiizinkan = useMemo(() => {
       }
 
       const dataBaru = bersihkanUndefined({
+        sekolahId,
         nama: nama.trim(),
         nisn: nisn.trim(),
         tempatLahir,

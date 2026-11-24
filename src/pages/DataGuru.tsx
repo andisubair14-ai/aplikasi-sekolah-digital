@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import {
   useState,
   useEffect,
@@ -73,6 +74,9 @@ const urutKelas = (a: Kelas, b: Kelas) => {
 };
 
 export default function DataPegawai() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [guruList, setGuruList] = useState<Guru[]>([]);
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
@@ -111,8 +115,7 @@ export default function DataPegawai() {
   // MEMBACA DATA GURU, ROMBEL, DAN TAHUN AJARAN
   // --------------------------------------------------
   useEffect(() => {
-    const unsubGuru = onSnapshot(
-      collection(db, 'guru'),
+    const unsubGuru = onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -128,8 +131,7 @@ export default function DataPegawai() {
       }
     );
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -144,8 +146,7 @@ export default function DataPegawai() {
       }
     );
 
-    const unsubTahun = onSnapshot(
-      collection(db, 'tahun_ajaran'),
+    const unsubTahun = onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -525,6 +526,7 @@ export default function DataPegawai() {
 
     try {
       const dataBaru: Record<string, any> = {
+        sekolahId,
         nama: nama.trim(),
         jenisKelamin,
         nip: nip.trim(),
@@ -662,7 +664,7 @@ export default function DataPegawai() {
     try {
       // Periksa apakah akun pengguna masih memakai guruId ini.
       const akunTerkait = await getDocs(
-        query(collection(db, 'users'), where('guruId', '==', id))
+        query(collection(db, 'users'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('guruId', '==', id))
       );
 
       if (!akunTerkait.empty) {

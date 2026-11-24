@@ -1,12 +1,6 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -56,6 +50,9 @@ const badgeRole = (role?: string) => {
 };
 
 export default function ManajemenPengguna() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [usersList, setUsersList] = useState<UserRecord[]>([]);
   const [guruList, setGuruList] = useState<GuruRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,8 +87,7 @@ export default function ManajemenPengguna() {
     let usersLoaded = false;
     let guruLoaded = false;
 
-    const unsubUsers = onSnapshot(
-      collection(db, 'users'),
+    const unsubUsers = onSnapshot(query(collection(db, 'users'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -109,8 +105,7 @@ export default function ManajemenPengguna() {
       }
     );
 
-    const unsubGuru = onSnapshot(
-      collection(db, 'guru'),
+    const unsubGuru = onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -222,7 +217,7 @@ export default function ManajemenPengguna() {
       );
       akunBaru = credential.user;
 
-      await setDoc(doc(db, 'users', credential.user.uid), {
+      await setDoc(doc(db, 'users', credential.user.uid), { sekolahId,
         email: emailBersih,
         nama: namaBersih,
         role,

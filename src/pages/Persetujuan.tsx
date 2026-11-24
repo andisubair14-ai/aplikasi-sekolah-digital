@@ -1,13 +1,7 @@
-import { useState, useEffect } from 'react';
-import {
-  collection,
-  onSnapshot,
-  doc,
-  serverTimestamp,
-  writeBatch,
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot, doc, serverTimestamp, writeBatch, query, where } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 type JurnalRecord = {
   id: string;
@@ -31,6 +25,7 @@ type JurnalRecord = {
 
 export default function Persetujuan() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [jurnalList, setJurnalList] = useState<JurnalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('Dikirim');
@@ -38,8 +33,7 @@ export default function Persetujuan() {
   const [errorData, setErrorData] = useState('');
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'jurnal'),
+    const unsub = onSnapshot(query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -101,7 +95,7 @@ export default function Persetujuan() {
       });
 
       const notifRef = doc(collection(db, 'users', uidGuru, 'notifikasi'));
-      batch.set(notifRef, {
+      batch.set(notifRef, { sekolahId,
         judul,
         pesan,
         tipe: adalahDisetujui ? 'jurnal_disetujui' : 'jurnal_revisi',

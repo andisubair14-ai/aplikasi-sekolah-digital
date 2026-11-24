@@ -1,7 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type StatusAbsensi = 'Hadir' | 'Sakit' | 'Izin' | 'Alpa';
 type StatusFilter = 'Semua' | StatusAbsensi | 'Belum diisi';
@@ -114,6 +114,7 @@ const statusBadge = (status: StatusAbsensi | 'Belum diisi') => {
 
 export default function MonitoringKehadiran() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [kelasList, setKelasList] = useState<KelasRecord[]>([]);
   const [siswaList, setSiswaList] = useState<SiswaRecord[]>([]);
   const [tahunList, setTahunList] = useState<TahunRecord[]>([]);
@@ -152,19 +153,19 @@ export default function MonitoringKehadiran() {
     };
 
     const unsubscribers = [
-      onSnapshot(collection(db, 'kelas'), (snapshot) => {
+      onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasRecord[]);
         kelasReady = true; cekSelesai();
       }, tanganiError('rombel')),
-      onSnapshot(collection(db, 'siswa'), (snapshot) => {
+      onSnapshot(query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
         setSiswaList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as SiswaRecord[]);
         siswaReady = true; cekSelesai();
       }, tanganiError('siswa')),
-      onSnapshot(query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')), (snapshot) => {
+      onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')), (snapshot) => {
         setTahunList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunRecord[]);
         tahunReady = true; cekSelesai();
       }, tanganiError('tahun ajaran')),
-      onSnapshot(collection(db, 'guru'), (snapshot) => {
+      onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => {
         setGuruList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as GuruRecord[]);
         guruReady = true; cekSelesai();
       }, tanganiError('guru')),
@@ -183,7 +184,7 @@ export default function MonitoringKehadiran() {
       return;
     }
     setLoadingAbsensi(true);
-    const q = query(collection(db, 'absensi'), where('tanggal', '==', selectedTanggal));
+    const q = query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('tanggal', '==', selectedTanggal));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setAbsensiList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as AbsensiRecord[]);
       setLoadingAbsensi(false);

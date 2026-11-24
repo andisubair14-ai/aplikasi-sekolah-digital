@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +8,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { buatModulDenganAI } from '../utils/geminiModulAjar';
-import { useAuth } from '../contexts/AuthContext';
 import { adaptModulAjarToV2, buatModulAjarKosongV2 } from '../utils/modulAjarAdapter';
 import type { ModulAjarV2 } from '../types/modulAjar';
 
@@ -66,6 +66,7 @@ function Section({ n, title, desc, children }: SectionProps) {
 export default function ModulAjar() {
   const navigate = useNavigate();
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const userId = userData?.uid || '';
   const guruId = userData?.guruId || '';
   const namaGuru = userData?.nama || 'Guru';
@@ -96,7 +97,7 @@ export default function ModulAjar() {
 
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
-    const q = query(collection(db, 'modul_ajar'), where('userId', '==', userId));
+    const q = query(collection(db, 'modul_ajar'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('userId', '==', userId));
     return onSnapshot(q, snap => {
       const rows = snap.docs.map(d => ({ id: d.id, ...d.data() })) as R[];
       rows.sort((a,b) => (b.updatedAt?.toDate?.()?.getTime?.() || 0) - (a.updatedAt?.toDate?.()?.getTime?.() || 0));
@@ -204,7 +205,7 @@ export default function ModulAjar() {
         setMessage('Modul Ajar V2 berhasil diperbarui.');
       } else {
         if (legacyMode && data.legacyData) payload.legacyData = data.legacyData;
-        await addDoc(collection(db, 'modul_ajar'), { ...payload, createdAt: serverTimestamp() });
+        await addDoc(collection(db, 'modul_ajar'), { sekolahId, ...payload, createdAt: serverTimestamp() });
         setMessage(legacyMode
           ? 'Salinan Modul Ajar V2 berhasil dibuat. Dokumen lama tetap utuh.'
           : 'Modul Ajar V2 berhasil disimpan.');

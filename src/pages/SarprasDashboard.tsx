@@ -1,6 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 type RingkasanData = { inventaris: number; ruangan: number; perluPerbaikan: number; pemeliharaan: number };
@@ -27,6 +28,9 @@ const MODUL = [
 ];
 
 export default function SarprasDashboard() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [ringkasan, setRingkasan] = useState<RingkasanData>({ inventaris: 0, ruangan: 0, perluPerbaikan: 0, pemeliharaan: 0 });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -45,9 +49,9 @@ export default function SarprasDashboard() {
     };
     let ready = 0;
     const markReady = () => { ready += 1; if (ready >= 3) setLoading(false); };
-    const unsubInventory = onSnapshot(collection(db, 'inventaris_sarpras'), (snapshot) => { inventories = snapshot.docs.map((item) => item.data() as { kondisi?: string }); update(); markReady(); setLoadError(''); }, (error) => { console.error('Gagal membaca ringkasan inventaris:', error); setLoadError('Sebagian ringkasan belum dapat dimuat. Periksa aturan akses Firestore.'); markReady(); });
-    const unsubRooms = onSnapshot(collection(db, 'ruang_fasilitas_sarpras'), (snapshot) => { rooms = snapshot.docs.map((item) => item.data() as { kondisi?: string }); update(); markReady(); }, (error) => { console.error('Gagal membaca ringkasan ruang:', error); setLoadError('Sebagian ringkasan belum dapat dimuat. Periksa aturan akses Firestore.'); markReady(); });
-    const unsubMaintenance = onSnapshot(collection(db, 'pemeliharaan_sarpras'), (snapshot) => { maintenance = snapshot.docs.map((item) => item.data() as { status?: string }); update(); markReady(); }, (error) => { console.error('Gagal membaca ringkasan pemeliharaan:', error); setLoadError('Sebagian ringkasan belum dapat dimuat. Periksa aturan akses Firestore.'); markReady(); });
+    const unsubInventory = onSnapshot(query(collection(db, 'inventaris_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => { inventories = snapshot.docs.map((item) => item.data() as { kondisi?: string }); update(); markReady(); setLoadError(''); }, (error) => { console.error('Gagal membaca ringkasan inventaris:', error); setLoadError('Sebagian ringkasan belum dapat dimuat. Periksa aturan akses Firestore.'); markReady(); });
+    const unsubRooms = onSnapshot(query(collection(db, 'ruang_fasilitas_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => { rooms = snapshot.docs.map((item) => item.data() as { kondisi?: string }); update(); markReady(); }, (error) => { console.error('Gagal membaca ringkasan ruang:', error); setLoadError('Sebagian ringkasan belum dapat dimuat. Periksa aturan akses Firestore.'); markReady(); });
+    const unsubMaintenance = onSnapshot(query(collection(db, 'pemeliharaan_sarpras'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)), (snapshot) => { maintenance = snapshot.docs.map((item) => item.data() as { status?: string }); update(); markReady(); }, (error) => { console.error('Gagal membaca ringkasan pemeliharaan:', error); setLoadError('Sebagian ringkasan belum dapat dimuat. Periksa aturan akses Firestore.'); markReady(); });
     return () => { unsubInventory(); unsubRooms(); unsubMaintenance(); };
   }, []);
 

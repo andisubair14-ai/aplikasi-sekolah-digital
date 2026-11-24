@@ -1,7 +1,7 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type SiswaRecord = {
   id: string;
@@ -82,6 +82,7 @@ function cocokkanKelas(siswa: SiswaRecord, kelasList: KelasRecord[]): KelasRecor
 
 export default function MonitoringDataSiswa() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [siswaList, setSiswaList] = useState<SiswaRecord[]>([]);
   const [kelasList, setKelasList] = useState<KelasRecord[]>([]);
   const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaranRecord[]>([]);
@@ -113,8 +114,7 @@ export default function MonitoringDataSiswa() {
       if (sumberSiap >= 4 && masihAktif) setLoading(false);
     };
 
-    const unsubscribeSiswa = onSnapshot(
-      collection(db, 'siswa'),
+    const unsubscribeSiswa = onSnapshot(query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setSiswaList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as SiswaRecord[]);
         tandaiSiap();
@@ -126,8 +126,7 @@ export default function MonitoringDataSiswa() {
       }
     );
 
-    const unsubscribeKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubscribeKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         setKelasList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as KelasRecord[]);
         tandaiSiap();
@@ -140,7 +139,7 @@ export default function MonitoringDataSiswa() {
     );
 
     const unsubscribeTahun = onSnapshot(
-      query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')),
+      query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')),
       (snapshot) => {
         setTahunAjaranList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as TahunAjaranRecord[]);
         tandaiSiap();

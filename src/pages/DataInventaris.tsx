@@ -1,15 +1,8 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 type KondisiBarang = 'Baik' | 'Rusak Ringan' | 'Rusak Berat';
 
@@ -94,6 +87,7 @@ function Icon({ name, className = 'h-5 w-5' }: { name: 'back' | 'plus' | 'search
 
 export default function DataInventaris() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const [items, setItems] = useState<InventarisItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -107,8 +101,7 @@ export default function DataInventaris() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, 'inventaris_sarpras'),
+    const unsubscribe = onSnapshot(query(collection(db, 'inventaris_sarpras'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as InventarisItem));
         data.sort((a, b) => a.namaBarang.localeCompare(b.namaBarang, 'id'));
@@ -191,7 +184,7 @@ export default function DataInventaris() {
 
     setIsSaving(true);
     const uid = userData?.uid || '';
-    const dataSimpan = {
+    const dataSimpan = { sekolahId,
       namaBarang: form.namaBarang.trim(),
       kategori: form.kategori,
       merkTipe: form.merkTipe.trim(),

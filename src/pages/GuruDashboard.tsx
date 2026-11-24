@@ -1,9 +1,9 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import FotoProfilGuru from '../components/FotoProfilGuru';
 import ilustrasiGuruLakiLaki from '../assets/ilustrasi-guru-laki-laki.png';
 import ilustrasiGuruPerempuan from '../assets/ilustrasi-guru-perempuan.png';
-import { useAuth } from '../contexts/AuthContext';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -41,6 +41,7 @@ const COLORS = ['#10B981', '#F59E0B', '#E2E8F0'];
 
 export default function GuruDashboard() {
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
   const namaGuru = userData?.nama || 'Bapak/Ibu Guru';
   const guruId = userData?.guruId || null;
   const uid = userData?.uid || null;
@@ -140,7 +141,7 @@ export default function GuruDashboard() {
         gagalMemuat('profil guru', 'guru')
       ),
       onSnapshot(
-        query(collection(db, 'tahun_ajaran'), where('status', '==', 'Aktif')),
+        query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('status', '==', 'Aktif')),
         (snap) => {
           setTahunList(
             snap.docs.map((item) => ({ id: item.id, ...item.data() })) as YearRow[]
@@ -151,7 +152,7 @@ export default function GuruDashboard() {
       ),
       // Query dipisah supaya setiap permintaan hanya membaca jurnal milik akun ini.
       onSnapshot(
-        query(collection(db, 'jurnal'), where('userId', '==', uid)),
+        query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('userId', '==', uid)),
         (snap) => {
           setJurnalUserIdList(
             snap.docs.map((item) => ({ id: item.id, ...item.data() })) as JournalRow[]
@@ -162,7 +163,7 @@ export default function GuruDashboard() {
       ),
       // Menjaga kompatibilitas dengan jurnal lama yang menyimpan UID pada guruId.
       onSnapshot(
-        query(collection(db, 'jurnal'), where('guruId', '==', uid)),
+        query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('guruId', '==', uid)),
         (snap) => {
           setJurnalGuruIdList(
             snap.docs.map((item) => ({ id: item.id, ...item.data() })) as JournalRow[]
@@ -225,7 +226,7 @@ export default function GuruDashboard() {
     };
 
     const unsubscribeWali = onSnapshot(
-      query(collection(db, 'kelas'), where('waliKelasId', '==', guruId)),
+      query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('waliKelasId', '==', guruId)),
       (snap) => {
         if (!aktif) return;
         kelasWaliMap.clear();
@@ -302,7 +303,7 @@ export default function GuruDashboard() {
 
     setJadwalError('');
     const unsubscribe = onSnapshot(
-      query(collection(db, 'jadwal_pelajaran'), where('guruId', '==', guruId)),
+      query(collection(db, 'jadwal_pelajaran'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId), where('guruId', '==', guruId)),
       (snap) => {
         setJadwalList(snap.docs.map((item) => ({ id: item.id, ...item.data() })) as ScheduleRow[]);
         setJadwalError('');
@@ -380,8 +381,7 @@ export default function GuruDashboard() {
     };
 
     kelompok.forEach((idKelompok, index) => {
-      const q = query(
-        collection(db, 'siswa_ringkas'),
+      const q = query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId),
         where('kelasId', 'in', idKelompok)
       );
 
@@ -456,8 +456,7 @@ export default function GuruDashboard() {
     };
 
     kelompok.forEach((idKelompok, index) => {
-      const q = query(
-        collection(db, 'absensi'),
+      const q = query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId),
         where('kelasId', 'in', idKelompok),
         where('tanggal', '>=', weekStart),
         where('tanggal', '<=', today)

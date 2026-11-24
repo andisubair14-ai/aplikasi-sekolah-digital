@@ -1,12 +1,6 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, type FormEvent } from 'react';
-import {
-  collection,
-  doc,
-  deleteField,
-  onSnapshot,
-  getDocs,
-  setDoc,
-} from 'firebase/firestore';
+import { collection, doc, deleteField, onSnapshot, getDocs, setDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 const URUTAN_JENJANG = ['SD', 'SMP'];
@@ -65,6 +59,9 @@ const statusTemplateValid = (nilai: unknown): StatusTemplateWhatsApp =>
 const ZONA_WAKTU_VALID = ['Asia/Jakarta', 'Asia/Makassar', 'Asia/Jayapura'];
 
 export default function Pengaturan() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -305,7 +302,7 @@ export default function Pengaturan() {
 
         if (!konfirmasi) return;
 
-        const snapshotKelas = await getDocs(collection(db, 'kelas'));
+        const snapshotKelas = await getDocs(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)));
         const kelasTidakValid: string[] = [];
         const kelasDiLuarPilihan: string[] = [];
 
@@ -339,6 +336,7 @@ export default function Pengaturan() {
       await setDoc(
         doc(db, 'pengaturan', 'sekolah'),
         {
+          sekolahId,
           namaSekolah,
           npsn,
           alamat,

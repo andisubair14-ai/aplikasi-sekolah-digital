@@ -1,18 +1,12 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
-import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
 import FotoProfilGuru from './FotoProfilGuru';
 import FotoProfilKepsek from './FotoProfilKepsek';
-import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  setDoc,
-} from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, setDoc, query, where } from 'firebase/firestore';
 
 type PilihanJenjang = 'SD' | 'SMP' | 'GABUNGAN';
 
@@ -38,6 +32,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
 
   const basePath = userData?.role === 'admin'
     ? '/admin'
@@ -110,7 +105,7 @@ export default function DashboardLayout() {
 
     try {
       const pilihan = pilihanKeArray(pilihanAwal);
-      const kelasSnapshot = await getDocs(collection(db, 'kelas'));
+      const kelasSnapshot = await getDocs(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)));
       const kelasTidakValid: string[] = [];
       const kelasDiLuarPilihan: string[] = [];
 
@@ -143,6 +138,7 @@ export default function DashboardLayout() {
       await setDoc(
         doc(db, 'pengaturan', 'sekolah'),
         {
+          sekolahId,
           jenjangSekolah: pilihan,
           konfigurasiJenjangDiaturOleh: userData?.uid || null,
           konfigurasiJenjangUpdatedAt: new Date().toISOString(),

@@ -1,13 +1,6 @@
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useState, type FormEvent } from 'react';
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  updateDoc,
-  writeBatch,
-} from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 type TahunAjaranRecord = {
@@ -18,6 +11,9 @@ type TahunAjaranRecord = {
 };
 
 export default function TahunAjaran() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaranRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -31,8 +27,7 @@ export default function TahunAjaran() {
   const [semester, setSemester] = useState('Ganjil');
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, 'tahun_ajaran'),
+    const unsubscribe = onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -105,7 +100,7 @@ export default function TahunAjaran() {
         });
       } else {
         // Periode baru disimpan sebagai tidak aktif; Admin mengaktifkannya melalui centang di tabel.
-        await addDoc(collection(db, 'tahun_ajaran'), {
+        await addDoc(collection(db, 'tahun_ajaran'), { sekolahId,
           tahun: tahunBersih,
           semester,
           status: 'Tidak Aktif',

@@ -1,3 +1,4 @@
+import { useAuth } from '../contexts/AuthContext';
 
 import { useState, useEffect, useRef, useMemo, type ChangeEvent, type FormEvent } from 'react';
 import {
@@ -197,6 +198,9 @@ const jalankanOperasiBatch = async (
 // ==========================================
 
 export default function DataKelas() {
+  const { userData } = useAuth();
+  const sekolahId = userData?.sekolahId ?? '';
+
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [guruList, setGuruList] = useState<Guru[]>([]);
   const [tahunAjaranList, setTahunAjaranList] = useState<any[]>([]);
@@ -241,8 +245,7 @@ export default function DataKelas() {
       }
     };
 
-    const unsubKelas = onSnapshot(
-      collection(db, 'kelas'),
+    const unsubKelas = onSnapshot(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -262,8 +265,7 @@ export default function DataKelas() {
       }
     );
 
-    const unsubGuru = onSnapshot(
-      collection(db, 'guru'),
+    const unsubGuru = onSnapshot(query(collection(db, 'guru'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -282,8 +284,7 @@ export default function DataKelas() {
       }
     );
 
-    const unsubTahun = onSnapshot(
-      collection(db, 'tahun_ajaran'),
+    const unsubTahun = onSnapshot(query(collection(db, 'tahun_ajaran'), where('sekolahId', '==', sekolahId)),
       (snapshot) => {
         const data = snapshot.docs.map((item) => ({
           id: item.id,
@@ -550,7 +551,7 @@ export default function DataKelas() {
     setIsNormalisasi(true);
 
     try {
-      const snapshot = await getDocs(collection(db, 'kelas'));
+      const snapshot = await getDocs(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)));
 
       const daftarKelas: any[] = snapshot.docs.map((item) => ({
         id: item.id,
@@ -642,7 +643,7 @@ export default function DataKelas() {
             namaWali = getNamaGuru(waliId);
           }
 
-          const dataBaru = {
+          const dataBaru = { sekolahId,
             namaKelas: namaBaru,
             jenjang: item.jenjang,
             tingkat: Number(item.tingkat),
@@ -671,14 +672,12 @@ export default function DataKelas() {
           if (namaLama !== namaBaru) {
             const [siswaSnap, ringkasSnap] = await Promise.all([
               getDocs(
-                query(
-                  collection(db, 'siswa'),
+                query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId),
                   where('kelasId', '==', item.id)
                 )
               ),
               getDocs(
-                query(
-                  collection(db, 'siswa_ringkas'),
+                query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId),
                   where('kelasId', '==', item.id)
                 )
               )
@@ -941,7 +940,7 @@ export default function DataKelas() {
 
         // Validasi penugasan wali sebelum satu pun dokumen rombel ditulis.
         // Satu pegawai hanya boleh menjadi wali pada satu rombel per tahun ajaran.
-        const snapshotKelasLama = await getDocs(collection(db, 'kelas'));
+        const snapshotKelasLama = await getDocs(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)));
         const kelasLama = snapshotKelasLama.docs.map((item) => ({
           id: item.id,
           ...item.data()
@@ -1159,7 +1158,7 @@ export default function DataKelas() {
 
     try {
       // Ambil data terbaru langsung dari Firebase.
-      const snapshot = await getDocs(collection(db, 'kelas'));
+      const snapshot = await getDocs(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)));
 
       const daftarLama = snapshot.docs.map((item) => ({
         id: item.id,
@@ -1233,7 +1232,7 @@ export default function DataKelas() {
         const refBaru = doc(db, 'kelas', idTarget);
 
         operasi.push((batch) => {
-          batch.set(refBaru, {
+          batch.set(refBaru, { sekolahId,
             ...dataTarget,
             namaKelas: '',
             urutanRombel: 0
@@ -1288,7 +1287,7 @@ export default function DataKelas() {
               ? getNamaGuru(waliId)
               : item.waliKelas || '-';
 
-          const dataSimpan = {
+          const dataSimpan = { sekolahId,
             namaKelas: namaBaru,
             jenjang: item.jenjang,
             tingkat: Number(item.tingkat),
@@ -1306,14 +1305,12 @@ export default function DataKelas() {
           if (item.namaKelas && item.namaKelas !== namaBaru) {
             const [siswaSnap, ringkasSnap] = await Promise.all([
               getDocs(
-                query(
-                  collection(db, 'siswa'),
+                query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId),
                   where('kelasId', '==', item.id)
                 )
               ),
               getDocs(
-                query(
-                  collection(db, 'siswa_ringkas'),
+                query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId),
                   where('kelasId', '==', item.id)
                 )
               )
@@ -1377,32 +1374,27 @@ export default function DataKelas() {
       const [siswa, ringkas, absensi, jurnal, guruMapel] =
         await Promise.all([
           getDocs(
-            query(
-              collection(db, 'siswa'),
+            query(collection(db, 'siswa'), where('sekolahId', '==', sekolahId),
               where('kelasId', '==', kelas.id)
             )
           ),
           getDocs(
-            query(
-              collection(db, 'siswa_ringkas'),
+            query(collection(db, 'siswa_ringkas'), where('sekolahId', '==', sekolahId),
               where('kelasId', '==', kelas.id)
             )
           ),
           getDocs(
-            query(
-              collection(db, 'absensi'),
+            query(collection(db, 'absensi'), where('sekolahId', '==', sekolahId),
               where('kelas', '==', kelas.namaKelas)
             )
           ),
           getDocs(
-            query(
-              collection(db, 'jurnal'),
+            query(collection(db, 'jurnal'), where('sekolahId', '==', sekolahId),
               where('kelas', '==', kelas.namaKelas)
             )
           ),
           getDocs(
-            query(
-              collection(db, 'guru'),
+            query(collection(db, 'guru'), where('sekolahId', '==', sekolahId),
               where('kelasDiampu', 'array-contains', kelas.id)
             )
           )
@@ -1427,7 +1419,7 @@ export default function DataKelas() {
       await deleteDoc(doc(db, 'kelas', kelas.id));
 
       // Rapikan kembali nama rombel yang tersisa.
-      const snapshot = await getDocs(collection(db, 'kelas'));
+      const snapshot = await getDocs(query(collection(db, 'kelas'), where('sekolahId', '==', sekolahId), where('sekolahId', '==', sekolahId)));
 
       const anggota = snapshot.docs
         .map((item) => ({

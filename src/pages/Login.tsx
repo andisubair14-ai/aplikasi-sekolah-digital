@@ -11,6 +11,7 @@ import { auth, db } from '../lib/firebase';
 import gambarSekolah from '../assets/sekolah.png';
 
 export default function Login() {
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -511,6 +512,20 @@ export default function Login() {
               )}
 
             </button>
+
+            {/* TAUTAN PENDAFTARAN SEKOLAH BARU */}
+            <div className="mt-4 text-center">
+              <p className="text-xs text-slate-600">
+                Sekolah Anda belum terdaftar?{' '}
+                <button
+                  type="button"
+                  onClick={() => navigate('/daftar-sekolah')}
+                  className="font-bold text-blue-600 hover:text-blue-800 transition-colors underline underline-offset-2"
+                >
+                  Daftarkan Sekolah Baru
+                </button>
+              </p>
+            </div>
 
           </form>
 
